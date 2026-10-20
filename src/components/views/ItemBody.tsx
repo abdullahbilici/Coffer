@@ -95,10 +95,10 @@ export function ItemBody({ item, session, run, onCopy }: Props) {
       </div>
       {bodyHidden ? (
         <div className={styles.hidden}>
-          <span className={styles.mask}>
+          <button type="button" className={styles.mask} onClick={() => toggleSecret(WHOLE_BODY)}>
             <LockKeyhole size={12} strokeWidth={2} />
             hidden
-          </span>
+          </button>
         </div>
       ) : (
         <InlineBody

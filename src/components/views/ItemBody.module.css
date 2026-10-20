@@ -18,6 +18,8 @@
 }
 
 .mask {
+  border: none;
+  transition: color var(--duration-fast) var(--ease-out);
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -27,4 +29,8 @@
   color: var(--color-text-tertiary);
   font-size: var(--text-sm);
   line-height: 1.6;
+}
+
+.mask:hover {
+  color: var(--color-text);
 }

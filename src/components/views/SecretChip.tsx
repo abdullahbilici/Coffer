@@ -13,33 +13,33 @@ type Props = {
 
 /**
  * A secret (`` `!value!` ``): eye on the left in both states, "hidden" and a copy button while
- * masked. Once unmasked, clicking the value copies it.
+ * masked. Eye and "hidden" form one unhide button; only the copy button copies. Once unmasked,
+ * clicking the value copies it.
  */
 export function SecretChip({ value, shown, onToggle, onCopy, className }: Props) {
   const visible = shown && value !== null;
   const Eyes = visible ? EyeOff : Eye;
   return (
     <span className={cx(styles.secret, className)}>
+      {/* One button for eye + "hidden", so the eye never moves between states. */}
       <button
         type="button"
-        className={styles.action}
+        className={styles.toggle}
         aria-label={visible ? "Hide" : "Unhide"}
         onClick={onToggle}
       >
         {/* Re-keyed on every toggle so the icon crossfades instead of snapping. */}
         <Eyes key={String(visible)} size={13} strokeWidth={2} className={styles.swap} />
+        {!visible && <span className={styles.masked}>hidden</span>}
       </button>
       {visible ? (
         <button type="button" className={styles.value} onClick={onCopy}>
           {value}
         </button>
       ) : (
-        <>
-          <span className={styles.masked}>hidden</span>
-          <button type="button" className={styles.action} aria-label="Copy" onClick={onCopy}>
-            <Copy size={13} strokeWidth={2} />
-          </button>
-        </>
+        <button type="button" className={styles.action} aria-label="Copy" onClick={onCopy}>
+          <Copy size={13} strokeWidth={2} />
+        </button>
       )}
     </span>
   );

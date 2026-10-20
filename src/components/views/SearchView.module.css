@@ -52,17 +52,25 @@
   color: var(--color-text-tertiary);
 }
 
+/* Rows are inset with gaps between them, so hover and open states never touch. */
 .list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   margin: 0;
-  padding: 0;
+  padding: var(--space-1);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   list-style: none;
-  overflow: hidden;
 }
 
-.entry + .entry {
-  border-top: 1px solid var(--color-border);
+.entry {
+  border-radius: var(--radius-md);
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.entryOpen {
+  background: var(--color-bg-subtle);
 }
 
 .row {
@@ -70,8 +78,9 @@
   align-items: center;
   gap: var(--space-3);
   width: 100%;
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-2) var(--space-3);
   border: none;
+  border-radius: var(--radius-md);
   background: transparent;
   text-align: left;
   transition: background var(--duration-fast) var(--ease-out);
@@ -147,7 +156,7 @@
 }
 
 .preview {
-  padding: 0 var(--space-4) var(--space-3) calc(var(--space-4) + 20px + var(--space-3));
+  padding: var(--space-1) var(--space-3) var(--space-3) calc(var(--space-3) + 20px + var(--space-3));
 }
 
 .previewFooter {

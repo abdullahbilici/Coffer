@@ -70,9 +70,29 @@
   animation: swap var(--duration-base) var(--ease-out);
 }
 
-.masked {
-  padding: 0 4px;
+/* Eye + "hidden" as one button. */
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  height: 20px;
+  padding: 0 4px 0 3px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
   color: var(--color-text-tertiary);
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.toggle:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text);
+}
+
+.masked {
   font-family: var(--font-sans);
   font-size: var(--text-sm);
   user-select: none;
