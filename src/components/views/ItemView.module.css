@@ -1,0 +1,30 @@
+.body {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-subtle);
+  overflow: hidden;
+}
+
+.bodyToolbar {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.hidden {
+  padding: var(--space-4) var(--space-5);
+}
+
+.mask {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-selected);
+  color: var(--color-text-tertiary);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}

@@ -1,0 +1,33 @@
+.button {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: default;
+  transition:
+    background var(--duration-fast),
+    color var(--duration-fast);
+}
+
+.button:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text);
+}
+
+.md {
+  width: 28px;
+  height: 28px;
+}
+
+.sm {
+  width: 22px;
+  height: 22px;
+}
+
+.button:disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}

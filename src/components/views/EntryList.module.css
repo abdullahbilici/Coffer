@@ -1,0 +1,61 @@
+.list {
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  list-style: none;
+  overflow: hidden;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+}
+
+.row + .row {
+  border-top: 1px solid var(--color-border);
+}
+
+.row {
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.row:hover {
+  background: var(--color-bg-hover);
+}
+
+.icon {
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+}
+
+.text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.title {
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.location {
+  color: var(--color-text-tertiary);
+  font-size: var(--text-sm);
+}
+
+/* TagList adds its own block margins for the item header; reset them here. */
+.tags ul {
+  justify-content: flex-end;
+  margin: 0;
+}
+
+.empty {
+  color: var(--color-text-tertiary);
+}

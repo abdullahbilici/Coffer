@@ -1,0 +1,10 @@
+.body {
+  margin: 0;
+  padding: var(--space-4) var(--space-5);
+  font-family: var(--font-mono);
+  font-size: var(--text-md);
+  line-height: 2.15;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}

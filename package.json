@@ -1,0 +1,36 @@
+{
+  "name": "coffer",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "check": "tsc --noEmit && prettier --check src && cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test",
+    "format": "prettier --write src && cd src-tauri && cargo fmt",
+    "install:app": "tauri build && rm -rf /Applications/Coffer.app && cp -R src-tauri/target/release/bundle/macos/Coffer.app /Applications/ && rm -rf src-tauri/target/release/bundle"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-opener": "^2.7.2",
+    "lucide-react": "^1.60.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^6.0.2",
+    "prettier": "^3.9.10",
+    "typescript": "~6.0.3",
+    "vite": "^8.0.16"
+  },
+  "prettier": {
+    "printWidth": 100
+  }
+}

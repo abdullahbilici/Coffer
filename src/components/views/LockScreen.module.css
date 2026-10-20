@@ -1,0 +1,21 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  background: var(--color-bg-sidebar);
+}
+
+.logo {
+  width: 96px;
+  height: 96px;
+  margin-bottom: var(--space-4);
+}
+
+.title {
+  margin: 0 0 var(--space-6);
+  font-size: var(--text-xl);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}

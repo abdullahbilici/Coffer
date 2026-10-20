@@ -1,0 +1,113 @@
+/* Inline chips for copyable values and secrets, shared by item bodies and markdown. */
+
+.copyable,
+.secret {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--radius-sm);
+  line-height: 1.45;
+  vertical-align: baseline;
+}
+
+/* Negative margin cancels padding + border, so chips keep the text's column alignment. */
+.copyable {
+  margin: 0 -5px;
+  padding: 0 4px;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
+  /* Not the `font` shorthand: it would also inherit the body's tall line-height. */
+  font-family: inherit;
+  font-size: inherit;
+  transition:
+    background var(--duration-base) var(--ease-out),
+    border-color var(--duration-base) var(--ease-out),
+    color var(--duration-base) var(--ease-out);
+}
+
+.copyable:hover {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.copyable:active,
+.value:active {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  transition-duration: 0ms;
+}
+
+.secret {
+  margin-left: -3px;
+  padding: 0 2px;
+  background: var(--color-bg-selected);
+  transition: background var(--duration-base) var(--ease-out);
+}
+
+.action {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.action:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text);
+}
+
+/* Re-keyed on every toggle so the icon crossfades instead of snapping. */
+.swap {
+  animation: swap var(--duration-base) var(--ease-out);
+}
+
+.masked {
+  padding: 0 4px;
+  color: var(--color-text-tertiary);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  user-select: none;
+  animation: settle var(--duration-slow) var(--ease-out);
+}
+
+.value {
+  padding: 0 4px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: inherit;
+  animation: settle var(--duration-slow) var(--ease-out);
+  transition:
+    background var(--duration-base) var(--ease-out),
+    color var(--duration-base) var(--ease-out);
+}
+
+.value:hover {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+@keyframes settle {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+  }
+}
+
+@keyframes swap {
+  from {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+}
