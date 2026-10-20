@@ -38,7 +38,13 @@ npm run tauri build
 
 The app is written to `src-tauri/target/release/bundle/macos/Coffer.app`. Move it to `/Applications` and open it.
 
-To sign the build with your own Apple certificate, set `bundle.macOS.signingIdentity` in `src-tauri/tauri.conf.json` to your identity (`security find-identity -v -p codesigning` lists them). A stable signature means macOS only asks once for Keychain access.
+To sign the build with your own Apple certificate, pass its name (`security find-identity -v -p codesigning` lists them):
+
+```sh
+APPLE_SIGNING_IDENTITY="Apple Development: Your Name (TEAMID)" npm run tauri build
+```
+
+A stable signature means macOS only asks once for Keychain access.
 
 ## Using it
 

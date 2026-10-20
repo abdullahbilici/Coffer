@@ -10,7 +10,7 @@
     "tauri": "tauri",
     "check": "tsc --noEmit && prettier --check src && cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test",
     "format": "prettier --write src && cd src-tauri && cargo fmt",
-    "install:app": "tauri build && rm -rf /Applications/Coffer.app && cp -R src-tauri/target/release/bundle/macos/Coffer.app /Applications/ && rm -rf src-tauri/target/release/bundle",
+    "install:app": "[ -n \"$APPLE_SIGNING_IDENTITY\" ] || { echo \"Set APPLE_SIGNING_IDENTITY first (see README)\"; exit 1; }; tauri build && rm -rf /Applications/Coffer.app && cp -R src-tauri/target/release/bundle/macos/Coffer.app /Applications/ && rm -rf src-tauri/target/release/bundle",
     "reseed": "DB=\"$HOME/Library/Application Support/com.apo.coffer/coffer.db\"; [ -f \"$DB\" ] && mv \"$DB\" \"$DB.$(date +%Y%m%d-%H%M%S).bak\"; COFFER_SEED=1 tauri dev"
   },
   "dependencies": {
