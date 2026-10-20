@@ -16,7 +16,7 @@ pub struct ProjectSummary {
 pub struct Project {
     pub id: i64,
     pub name: String,
-    /// Markdown overview. With inline secrets this is the `{{0}}`-marker template;
+    /// Markdown overview. With inline secrets this is the `` `!0!` ``-marker template;
     /// the full text goes through `reveal_project_readme`.
     pub readme: String,
     pub has_secrets: bool,
@@ -134,10 +134,10 @@ mod tests {
             ciphertext: vec![2; 32],
         };
 
-        update_readme(&conn, id, "pass: {{0}}", Some(&sealed), 1).unwrap();
+        update_readme(&conn, id, "pass: `!0!`", Some(&sealed), 1).unwrap();
         assert!(get(&conn, id).unwrap().has_secrets);
         let (template, stored) = readme_secrets(&conn, id).unwrap();
-        assert_eq!(template, "pass: {{0}}");
+        assert_eq!(template, "pass: `!0!`");
         assert_eq!(stored.ciphertext, sealed.ciphertext);
 
         update_readme(&conn, id, "no secrets", None, 2).unwrap();

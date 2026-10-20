@@ -15,7 +15,7 @@ export type SessionInfo = {
 export type ProjectSummary = { id: number; name: string };
 
 export type Project = ProjectSummary & {
-  /** Markdown; with inline secrets, a `{{0}}`-marker template. */
+  /** Markdown; with inline secrets, a `` `!0!` ``-marker template. */
   readme: string;
   hasSecrets: boolean;
   updatedAt: number;
@@ -35,13 +35,13 @@ export type ItemSummary = {
   title: string;
   /** The whole body is encrypted. */
   secure: boolean;
-  /** A plain body with `{{...}}` spans encrypted separately. */
+  /** A plain body with `` `!...!` `` spans encrypted separately. */
   hasSecrets: boolean;
   tags: string[];
   updatedAt: number;
 };
 
-/** `body` is `null` for secure items and a `{{0}}`-marker template for items with inline secrets. */
+/** `body` is `null` for secure items and a `` `!0!` ``-marker template for items with inline secrets. */
 export type Item = ItemSummary & { body: string | null };
 
 export type Tree = {

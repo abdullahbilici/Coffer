@@ -6,12 +6,22 @@ use std::path::Path;
 
 use rusqlite::Connection;
 
-use crate::error::{AppError, AppResult};
+use crate::{
+    error::{AppError, AppResult},
+    secrets,
+};
+
+enum Migration {
+    Sql(&'static str),
+    /// Data changes SQL can't express. Runs inside the migration's transaction.
+    Code(fn(&Connection) -> AppResult<()>),
+}
 
 /// Schema migrations, applied in order. `PRAGMA user_version` stores how many have run.
 /// Never edit a shipped migration; append a new one instead.
-const MIGRATIONS: &[&str] = &[
-    r#"
+const MIGRATIONS: &[Migration] = &[
+    Migration::Sql(
+        r#"
     CREATE TABLE projects (
         id         INTEGER PRIMARY KEY,
         name       TEXT    NOT NULL,
@@ -51,12 +61,37 @@ const MIGRATIONS: &[&str] = &[
     CREATE INDEX items_project ON items (project_id);
     CREATE INDEX items_folder ON items (folder_id);
 "#,
+    ),
     // Inline secrets in project overviews, same scheme as items.
-    r#"
+    Migration::Sql(
+        r#"
     ALTER TABLE projects ADD COLUMN readme_nonce BLOB;
     ALTER TABLE projects ADD COLUMN readme_ciphertext BLOB;
 "#,
+    ),
+    // Secret markers moved from `{{n}}` to `` `!n!` ``.
+    Migration::Code(upgrade_secret_markers),
 ];
+
+fn upgrade_secret_markers(conn: &Connection) -> AppResult<()> {
+    let tables = [
+        ("items", "body", "secure = 0 AND ciphertext IS NOT NULL"),
+        ("projects", "readme", "readme_ciphertext IS NOT NULL"),
+    ];
+    for (table, column, filter) in tables {
+        let rows: Vec<(i64, String)> = conn
+            .prepare(&format!("SELECT id, {column} FROM {table} WHERE {filter}"))?
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<Result<_, _>>()?;
+        for (id, template) in rows {
+            conn.execute(
+                &format!("UPDATE {table} SET {column} = ?2 WHERE id = ?1"),
+                rusqlite::params![id, secrets::upgrade_legacy_markers(&template)],
+            )?;
+        }
+    }
+    Ok(())
+}
 
 pub fn open(path: &Path) -> AppResult<Connection> {
     let conn = Connection::open(path)?;
@@ -67,11 +102,14 @@ pub fn open(path: &Path) -> AppResult<Connection> {
 
 fn migrate(conn: &Connection) -> AppResult<()> {
     let applied: i64 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    for (index, sql) in MIGRATIONS.iter().enumerate().skip(applied as usize) {
-        conn.execute_batch(&format!(
-            "BEGIN; {sql}; PRAGMA user_version = {}; COMMIT;",
-            index + 1
-        ))?;
+    for (index, migration) in MIGRATIONS.iter().enumerate().skip(applied as usize) {
+        let tx = conn.unchecked_transaction()?;
+        match migration {
+            Migration::Sql(sql) => tx.execute_batch(sql)?,
+            Migration::Code(run) => run(&tx)?,
+        }
+        tx.pragma_update(None, "user_version", (index + 1) as i64)?;
+        tx.commit()?;
     }
     Ok(())
 }
@@ -97,4 +135,38 @@ pub fn open_in_memory() -> Connection {
     conn.pragma_update(None, "foreign_keys", true).unwrap();
     migrate(&conn).unwrap();
     conn
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn migration_3_upgrades_legacy_secret_markers() {
+        let conn = open_in_memory();
+        conn.execute_batch(
+            "INSERT INTO projects (id, name, readme, readme_ciphertext, created_at, updated_at)
+             VALUES (1, 'Acme', 'vpn: {{0}}', x'00', 0, 0);
+             INSERT INTO items (project_id, title, secure, body, ciphertext, created_at, updated_at)
+             VALUES (1, 'Login', 0, 'pass: {{0}} {{1}}', x'00', 0, 0),
+                    (1, 'Plain', 0, 'literal {{0}}', NULL, 0, 0);
+             PRAGMA user_version = 2;",
+        )
+        .unwrap();
+
+        migrate(&conn).unwrap();
+
+        let readme: String = conn
+            .query_row("SELECT readme FROM projects", [], |r| r.get(0))
+            .unwrap();
+        let bodies: Vec<String> = conn
+            .prepare("SELECT body FROM items ORDER BY id")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(readme, "vpn: `!0!`");
+        assert_eq!(bodies, vec!["pass: `!0!` `!1!`", "literal {{0}}"]);
+    }
 }

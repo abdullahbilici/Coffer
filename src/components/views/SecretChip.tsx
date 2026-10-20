@@ -12,7 +12,7 @@ type Props = {
 };
 
 /**
- * A secret (`{{value}}`): eye on the left in both states, "hidden" and a copy button while
+ * A secret (`` `!value!` ``): eye on the left in both states, "hidden" and a copy button while
  * masked. Once unmasked, clicking the value copies it.
  */
 export function SecretChip({ value, shown, onToggle, onCopy, className }: Props) {

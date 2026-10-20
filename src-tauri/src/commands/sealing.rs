@@ -16,7 +16,7 @@ pub fn seal(state: &AppState, plaintext: &str) -> AppResult<SecureBody> {
     Ok(SecureBody { nonce, ciphertext })
 }
 
-/// Splits the `{{...}}` spans out of `body` and encrypts them as one list.
+/// Splits the `` `!...!` `` spans out of `body` and encrypts them as one list.
 /// Returns `None` when the body has no secrets.
 pub fn seal_inline(state: &AppState, body: &str) -> AppResult<Option<(String, SecureBody)>> {
     let (template, spans) = secrets::extract(body);

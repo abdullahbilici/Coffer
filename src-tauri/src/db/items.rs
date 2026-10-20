@@ -16,7 +16,7 @@ pub struct ItemSummary {
     pub title: String,
     /// The whole body is encrypted.
     pub secure: bool,
-    /// A plain body with `{{...}}` spans encrypted separately (see `secrets`).
+    /// A plain body with `` `!...!` `` spans encrypted separately (see `secrets`).
     pub has_secrets: bool,
     pub tags: Vec<String>,
     pub updated_at: i64,
@@ -28,7 +28,7 @@ pub struct Item {
     #[serde(flatten)]
     pub summary: ItemSummary,
     /// `None` for secure items. For items with inline secrets this is the template with
-    /// `{{0}}`-style markers; the full text goes through `reveal_item`.
+    /// `` `!0!` ``-style markers; the full text goes through `reveal_item`.
     pub body: Option<String>,
 }
 
