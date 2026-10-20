@@ -49,6 +49,11 @@ impl Session {
         }
     }
 
+    /// Any change to the vault needs an open unlock window, not just being in the app.
+    pub fn require_unlocked(&mut self) -> AppResult<()> {
+        self.active_key().map(|_| ())
+    }
+
     /// Returns a copy of the key while the unlock window is open.
     pub fn active_key(&mut self) -> AppResult<VaultKey> {
         self.require_entered()?;
@@ -85,4 +90,25 @@ pub fn schedule_expiry(session: Arc<Mutex<Session>>) {
             .expect("session lock poisoned")
             .clear_if_expired();
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use zeroize::Zeroizing;
+
+    use super::*;
+
+    #[test]
+    fn edits_need_an_open_window_not_just_entry() {
+        let mut session = Session::default();
+        assert!(matches!(session.require_unlocked(), Err(AppError::Locked)));
+
+        session.open_window(Zeroizing::new(vec![0; 32]));
+        assert!(session.require_unlocked().is_ok());
+
+        // Window closed (expiry, screen lock, Lock button): still in the app, but read-only.
+        session.close_window();
+        assert!(session.require_entered().is_ok());
+        assert!(matches!(session.require_unlocked(), Err(AppError::Locked)));
+    }
 }

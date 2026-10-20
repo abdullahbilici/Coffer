@@ -92,11 +92,15 @@ export const api = {
   createFolder: (projectId: number, parentId: number | null, name: string) =>
     invoke<number>("create_folder", { projectId, parentId, name }),
   renameFolder: (id: number, name: string) => invoke<void>("rename_folder", { id, name }),
+  moveFolder: (id: number, projectId: number, parentId: number | null) =>
+    invoke<void>("move_folder", { id, projectId, parentId }),
   deleteFolder: (id: number) => invoke<void>("delete_folder", { id }),
 
   getItem: (id: number) => invoke<Item>("get_item", { id }),
   revealItem: (id: number) => invoke<string>("reveal_item", { id }),
   saveItem: (input: SaveItemInput) => invoke<ItemSummary>("save_item", { input }),
   duplicateItem: (id: number) => invoke<ItemSummary>("duplicate_item", { id }),
+  moveItem: (id: number, projectId: number, folderId: number | null) =>
+    invoke<void>("move_item", { id, projectId, folderId }),
   deleteItem: (id: number) => invoke<void>("delete_item", { id }),
 };

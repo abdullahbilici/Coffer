@@ -3,7 +3,7 @@ import { ChevronsDownUp, Plus, Search, X } from "lucide-react";
 import type { VaultActions } from "../../app/actions";
 import type { Session } from "../../hooks/useSession";
 import type { Tree } from "../../lib/api";
-import { inSection, type Selection, type TreeSection } from "../../lib/selection";
+import type { Selection, TreeSection } from "../../lib/selection";
 import { buildTagTree } from "../../lib/tags";
 import { buildProjectTree } from "../../lib/tree";
 import { IconButton } from "../ui/IconButton";
@@ -11,6 +11,7 @@ import { Kbd } from "../ui/Kbd";
 import { ProjectTree, type TreeEdit } from "./ProjectTree";
 import { SessionBar } from "./SessionBar";
 import { TagTree } from "./TagTree";
+import { TreeDndProvider } from "./TreeDnd";
 import styles from "./Sidebar.module.css";
 
 type Props = {
@@ -82,21 +83,32 @@ export function Sidebar(props: Props) {
                 icon={Plus}
                 label="New project"
                 size="sm"
-                onClick={() => onEdit({ type: "createProject" })}
+                onClick={() => actions.guard(() => onEdit({ type: "createProject" }))}
               />
             </>
           }
         >
-          <ProjectTree
-            nodes={projectNodes}
+          <TreeDndProvider
+            tree={tree}
             expanded={expanded}
-            selection={selection}
-            edit={edit}
-            onEdit={onEdit}
-            onToggle={onToggle}
             onExpand={onExpand}
-            actions={actions}
-          />
+            onMove={(subject, { projectId, folderId }) =>
+              subject.kind === "item"
+                ? actions.moveItem(subject.id, projectId, folderId)
+                : actions.moveFolder(subject.id, projectId, folderId)
+            }
+          >
+            <ProjectTree
+              nodes={projectNodes}
+              expanded={expanded}
+              selection={selection}
+              edit={edit}
+              onEdit={onEdit}
+              onToggle={onToggle}
+              onExpand={onExpand}
+              actions={actions}
+            />
+          </TreeDndProvider>
         </Section>
 
         <Section title="Tags" action={<CollapseAll section="tags" {...props} />}>
@@ -120,14 +132,12 @@ export function Sidebar(props: Props) {
   );
 }
 
-function CollapseAll({ section, expanded, onCollapseAll }: Props & { section: TreeSection }) {
-  const anyOpen = [...expanded].some((key) => inSection(key, section));
+function CollapseAll({ section, onCollapseAll }: Props & { section: TreeSection }) {
   return (
     <IconButton
       icon={ChevronsDownUp}
       label="Collapse all"
       size="sm"
-      disabled={!anyOpen}
       onClick={() => onCollapseAll(section)}
     />
   );

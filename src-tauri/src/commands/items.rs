@@ -40,29 +40,19 @@ pub fn reveal_item(state: State<AppState>, id: i64) -> AppResult<String> {
 
 #[tauri::command]
 pub fn save_item(state: State<AppState>, input: SaveItemInput) -> AppResult<ItemSummary> {
-    state.session().require_entered()?;
+    state.session().require_unlocked()?;
     let title = required_name(&input.title, "Title")?;
     let tags = items::normalize_tags(&input.tags);
     let conn = state.db();
 
     ensure_folder_in_project(&conn, input.folder_id, input.project_id)?;
 
-    // Writing encrypted content, or overwriting it, needs an open unlock window.
-    let was_protected = match input.id {
-        Some(id) => items::is_protected(&conn, id)?,
-        None => false,
-    };
     let body = if input.secure {
         Body::Secure(seal(&state, &input.body)?)
     } else {
         match seal_inline(&state, &input.body)? {
             Some((template, secrets)) => Body::Inline { template, secrets },
-            None => {
-                if was_protected {
-                    state.session().active_key()?;
-                }
-                Body::Plain(input.body)
-            }
+            None => Body::Plain(input.body),
         }
     };
 
@@ -85,8 +75,21 @@ pub fn save_item(state: State<AppState>, input: SaveItemInput) -> AppResult<Item
 }
 
 #[tauri::command]
+pub fn move_item(
+    state: State<AppState>,
+    id: i64,
+    project_id: i64,
+    folder_id: Option<i64>,
+) -> AppResult<()> {
+    state.session().require_unlocked()?;
+    let conn = state.db();
+    ensure_folder_in_project(&conn, folder_id, project_id)?;
+    items::move_to(&conn, id, project_id, folder_id, now_millis())
+}
+
+#[tauri::command]
 pub fn duplicate_item(state: State<AppState>, id: i64) -> AppResult<ItemSummary> {
-    state.session().require_entered()?;
+    state.session().require_unlocked()?;
     let conn = state.db();
     let copy = items::duplicate(&conn, id, now_millis())?;
     items::summary(&conn, copy)
@@ -94,6 +97,6 @@ pub fn duplicate_item(state: State<AppState>, id: i64) -> AppResult<ItemSummary>
 
 #[tauri::command]
 pub fn delete_item(state: State<AppState>, id: i64) -> AppResult<()> {
-    state.session().require_entered()?;
+    state.session().require_unlocked()?;
     items::delete(&state.db(), id)
 }

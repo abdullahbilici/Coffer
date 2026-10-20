@@ -88,14 +88,6 @@ pub fn update_readme(
     expect_changed(changed)
 }
 
-pub fn readme_has_secrets(conn: &Connection, id: i64) -> AppResult<bool> {
-    Ok(conn.query_row(
-        "SELECT readme_ciphertext IS NOT NULL FROM projects WHERE id = ?1",
-        [id],
-        |row| row.get(0),
-    )?)
-}
-
 /// The overview template and its sealed secrets.
 pub fn readme_secrets(conn: &Connection, id: i64) -> AppResult<(String, SecureBody)> {
     Ok(conn.query_row(
@@ -141,6 +133,6 @@ mod tests {
         assert_eq!(stored.ciphertext, sealed.ciphertext);
 
         update_readme(&conn, id, "no secrets", None, 2).unwrap();
-        assert!(!readme_has_secrets(&conn, id).unwrap());
+        assert!(!get(&conn, id).unwrap().has_secrets);
     }
 }

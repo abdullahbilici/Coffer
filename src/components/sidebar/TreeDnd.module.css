@@ -1,0 +1,40 @@
+/* Set on <html> while dragging. */
+.dragging,
+.dragging * {
+  cursor: grabbing !important;
+}
+
+.ghost {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--row-height);
+  padding: 0 var(--space-3) 0 var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-elevated);
+  box-shadow: var(--shadow-popover);
+  color: var(--color-text);
+  font-size: var(--text-md);
+  white-space: nowrap;
+  width: max-content;
+  max-width: 260px;
+  transform: rotate(-1.5deg) scale(1.03);
+  animation: lift var(--duration-base) var(--ease-out);
+}
+
+.ghostIcon {
+  flex-shrink: 0;
+  color: var(--color-accent);
+}
+
+.ghostLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@keyframes lift {
+  from {
+    transform: rotate(0) scale(1);
+    box-shadow: none;
+  }
+}

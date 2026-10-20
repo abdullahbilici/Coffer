@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Search, Tag } from "lucide-react";
+import { Tag } from "lucide-react";
 import type { TreeEdit } from "../components/sidebar/ProjectTree";
 import { Sidebar } from "../components/sidebar/Sidebar";
 import { Toast } from "../components/ui/Toast";
@@ -9,6 +9,7 @@ import { ItemEditor, emptyDraft } from "../components/views/ItemEditor";
 import { ItemListView } from "../components/views/ItemListView";
 import { ItemView } from "../components/views/ItemView";
 import { LockScreen } from "../components/views/LockScreen";
+import { SearchView } from "../components/views/SearchView";
 import { useSession } from "../hooks/useSession";
 import { useToast } from "../hooks/useToast";
 import { useVault } from "../hooks/useVault";
@@ -132,56 +133,80 @@ export function App() {
       },
       selectTag: (path) => select({ kind: "tag", path }),
       openItem,
-      newItem: (projectId, folderId) => select({ kind: "newItem", projectId, folderId }),
+      guard: (then) =>
+        run(async () => {
+          await session.ensureUnlocked();
+          then();
+        }),
+      newItem: (projectId, folderId) =>
+        run(async () => {
+          await session.ensureUnlocked();
+          select({ kind: "newItem", projectId, folderId });
+        }),
 
       createProject: (name) =>
         run(async () => {
-          const project = await api.createProject(name);
+          const project = await session.withUnlock(() => api.createProject(name));
           await reload();
           select({ kind: "project", id: project.id });
         }),
       renameProject: (id, name) =>
         run(async () => {
-          await api.renameProject(id, name);
+          await session.withUnlock(() => api.renameProject(id, name));
           await reload();
         }),
       deleteProject: (id) =>
         run(async () => {
-          await api.deleteProject(id);
+          await session.withUnlock(() => api.deleteProject(id));
           await reload();
           setSelection(null);
         }),
 
-      startCreateFolder: (projectId, parentId) => {
-        expandTo(projectId, parentId);
-        setTreeEdit({ type: "createFolder", projectId, parentId });
-      },
+      startCreateFolder: (projectId, parentId) =>
+        run(async () => {
+          await session.ensureUnlocked();
+          expandTo(projectId, parentId);
+          setTreeEdit({ type: "createFolder", projectId, parentId });
+        }),
       createFolder: (projectId, parentId, name) =>
         run(async () => {
-          await api.createFolder(projectId, parentId, name);
+          await session.withUnlock(() => api.createFolder(projectId, parentId, name));
           await reload();
         }),
       renameFolder: (id, name) =>
         run(async () => {
-          await api.renameFolder(id, name);
+          await session.withUnlock(() => api.renameFolder(id, name));
+          await reload();
+        }),
+      // After a move, open the destination so the moved row is visible where it landed.
+      moveFolder: (id, projectId, parentId) =>
+        run(async () => {
+          await session.withUnlock(() => api.moveFolder(id, projectId, parentId));
+          expandTo(projectId, parentId);
+          await reload();
+        }),
+      moveItem: (id, projectId, folderId) =>
+        run(async () => {
+          await session.withUnlock(() => api.moveItem(id, projectId, folderId));
+          expandTo(projectId, folderId);
           await reload();
         }),
       deleteFolder: (id) =>
         run(async () => {
-          await api.deleteFolder(id);
+          await session.withUnlock(() => api.deleteFolder(id));
           await reload();
           setSelection(null);
         }),
 
       duplicateItem: (id) =>
         run(async () => {
-          const copy = await api.duplicateItem(id);
+          const copy = await session.withUnlock(() => api.duplicateItem(id));
           await reload();
           openItem(copy);
         }),
       deleteItem: (id) =>
         run(async () => {
-          await api.deleteItem(id);
+          await session.withUnlock(() => api.deleteItem(id));
           await reload();
           setSelection((s) => (s?.kind === "item" && s.id === id ? null : s));
         }),
@@ -201,19 +226,15 @@ export function App() {
   if (!tree) return null;
 
   const renderMain = () => {
-    const q = query.trim().toLowerCase();
-    if (q) {
-      const results = tree.items.filter(
-        (i) => i.title.toLowerCase().includes(q) || i.tags.some((t) => t.toLowerCase().includes(q)),
-      );
+    if (query.trim()) {
       return (
-        <ItemListView
-          icon={Search}
-          title={`Results for "${query.trim()}"`}
-          items={results}
+        <SearchView
+          query={query}
           tree={tree}
-          onOpen={openItem}
-          onSelectTag={actions.selectTag}
+          session={session}
+          run={run}
+          actions={actions}
+          onCopy={copy}
         />
       );
     }

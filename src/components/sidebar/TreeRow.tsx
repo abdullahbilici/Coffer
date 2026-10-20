@@ -1,4 +1,5 @@
 import { useState, type MouseEvent, type ReactNode } from "react";
+import type { useTreeNode } from "./TreeDnd";
 import { ChevronRight, type LucideIcon } from "lucide-react";
 import { cx } from "../../lib/cx";
 import styles from "./TreeRow.module.css";
@@ -19,6 +20,10 @@ type Props = {
   actions?: ReactNode;
   /** Shown when not hovered, right-aligned (counts, badges). */
   trailing?: ReactNode;
+  /** Drag-and-drop wiring from `useTreeNode`. */
+  dnd?: ReturnType<typeof useTreeNode>;
+  /** Highlights the row as the place a drag will land. */
+  dropTarget?: boolean;
 };
 
 export function TreeRow({
@@ -32,6 +37,8 @@ export function TreeRow({
   onContextMenu,
   actions,
   trailing,
+  dnd,
+  dropTarget,
 }: Props) {
   const expandable = expanded !== undefined;
   return (
@@ -39,7 +46,14 @@ export function TreeRow({
       role="treeitem"
       aria-expanded={expanded}
       aria-selected={selected}
-      className={cx(styles.row, selected && styles.selected)}
+      ref={dnd?.ref}
+      {...dnd?.handleProps}
+      className={cx(
+        styles.row,
+        selected && styles.selected,
+        dnd?.isDragging && styles.dragging,
+        dropTarget && styles.dropTarget,
+      )}
       style={{ paddingLeft: 8 + depth * INDENT_PX }}
       onClick={onClick}
       onContextMenu={onContextMenu}

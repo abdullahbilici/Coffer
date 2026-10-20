@@ -102,15 +102,6 @@ pub fn summary(conn: &Connection, id: i64) -> AppResult<ItemSummary> {
     Ok(get(conn, id)?.summary)
 }
 
-/// True when any part of the item is encrypted.
-pub fn is_protected(conn: &Connection, id: i64) -> AppResult<bool> {
-    Ok(conn.query_row(
-        "SELECT ciphertext IS NOT NULL FROM items WHERE id = ?1",
-        [id],
-        |row| row.get(0),
-    )?)
-}
-
 pub fn encrypted(conn: &Connection, id: i64) -> AppResult<Encrypted> {
     Ok(conn.query_row(
         "SELECT secure, body, nonce, ciphertext FROM items WHERE id = ?1 AND ciphertext IS NOT NULL",
@@ -202,6 +193,21 @@ pub fn duplicate(conn: &Connection, id: i64, now: i64) -> AppResult<i64> {
     Ok(copy)
 }
 
+/// Moves an item to another folder or project root without touching its content.
+pub fn move_to(
+    conn: &Connection,
+    id: i64,
+    project_id: i64,
+    folder_id: Option<i64>,
+    now: i64,
+) -> AppResult<()> {
+    let changed = conn.execute(
+        "UPDATE items SET project_id = ?2, folder_id = ?3, updated_at = ?4 WHERE id = ?1",
+        params![id, project_id, folder_id, now],
+    )?;
+    expect_changed(changed)
+}
+
 pub fn delete(conn: &Connection, id: i64) -> AppResult<()> {
     conn.execute("DELETE FROM items WHERE id = ?1", [id])?;
     Ok(())
@@ -285,6 +291,16 @@ mod tests {
         assert_eq!(copied.summary.title, "Console copy");
         assert_eq!(copied.summary.tags, vec!["aws"]);
         assert_eq!(copied.body.as_deref(), Some("hello"));
+
+        // Moving the parent to another project carries the nested folder and item along.
+        let other = projects::insert(&conn, "Other", "", 0).unwrap();
+        folders::move_to(&conn, parent, other, None).unwrap();
+        assert_eq!(
+            folders::subtree(&conn, parent).unwrap(),
+            vec![parent, child]
+        );
+        assert_eq!(folders::project_of(&conn, child).unwrap(), other);
+        assert!(list(&conn).unwrap().iter().all(|i| i.project_id == other));
 
         folders::delete(&conn, parent).unwrap();
 

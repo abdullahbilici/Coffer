@@ -82,7 +82,10 @@ export function useProjectOverview({ projectId, run, session, onCopy }: Options)
   };
 
   const startEdit = (fallback: string) =>
-    run(async () => setDraft((await fullReadme()) || fallback));
+    run(async () => {
+      await session.ensureUnlocked();
+      setDraft((await fullReadme()) || fallback);
+    });
 
   const save = () =>
     run(async () => {

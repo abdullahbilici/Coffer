@@ -17,6 +17,7 @@ import type { FolderNode, ProjectNode } from "../../lib/tree";
 import { itemIcon } from "../itemIcon";
 import { IconButton } from "../ui/IconButton";
 import { Menu, type MenuAnchor, type MenuItem } from "../ui/Menu";
+import { sameTarget, useTreeDnd, useTreeNode } from "./TreeDnd";
 import { TreeEditRow, TreeRow } from "./TreeRow";
 import styles from "./Sidebar.module.css";
 
@@ -103,6 +104,9 @@ function ProjectBranch({ node, ctx }: { node: ProjectNode; ctx: Context }) {
   const key = nodeKey.project(project.id);
   const isOpen = expanded.has(key);
   const selected = selection?.kind === "project" && selection.id === project.id;
+  const here = { projectId: project.id, folderId: null };
+  const dnd = useTreeNode({ id: key, drop: { target: here, expandKey: key } });
+  const dropTarget = sameTarget(useTreeDnd().target, here);
 
   const newFolder = () => actions.startCreateFolder(project.id, null);
   const newItem = () => {
@@ -115,7 +119,7 @@ function ProjectBranch({ node, ctx }: { node: ProjectNode; ctx: Context }) {
     {
       label: "Rename",
       icon: Pencil,
-      onSelect: () => onEdit({ type: "renameProject", id: project.id }),
+      onSelect: () => actions.guard(() => onEdit({ type: "renameProject", id: project.id })),
     },
     {
       label: "Delete project",
@@ -147,6 +151,8 @@ function ProjectBranch({ node, ctx }: { node: ProjectNode; ctx: Context }) {
           label={project.name}
           expanded={isOpen}
           selected={selected}
+          dnd={dnd}
+          dropTarget={dropTarget}
           onClick={() => clickNode(ctx, key, selected, () => actions.selectProject(project.id))}
           onToggle={() => onToggle(key)}
           onContextMenu={(e) => openMenu(e, menuItems)}
@@ -229,6 +235,19 @@ function FolderBranch({ node, depth, ctx }: { node: FolderNode; depth: number; c
   const key = nodeKey.folder(folder.id);
   const isOpen = expanded.has(key);
   const selected = selection?.kind === "folder" && selection.id === folder.id;
+  const here = { projectId: folder.projectId, folderId: folder.id };
+  const dnd = useTreeNode({
+    id: key,
+    subject: {
+      kind: "folder",
+      id: folder.id,
+      label: folder.name,
+      icon: Folder,
+      from: { projectId: folder.projectId, folderId: folder.parentId },
+    },
+    drop: { target: here, expandKey: key },
+  });
+  const dropTarget = sameTarget(useTreeDnd().target, here);
 
   const newFolder = () => actions.startCreateFolder(folder.projectId, folder.id);
   const newItem = () => {
@@ -241,7 +260,7 @@ function FolderBranch({ node, depth, ctx }: { node: FolderNode; depth: number; c
     {
       label: "Rename",
       icon: Pencil,
-      onSelect: () => onEdit({ type: "renameFolder", id: folder.id }),
+      onSelect: () => actions.guard(() => onEdit({ type: "renameFolder", id: folder.id })),
     },
     {
       label: "Delete folder",
@@ -273,6 +292,8 @@ function FolderBranch({ node, depth, ctx }: { node: FolderNode; depth: number; c
           label={folder.name}
           expanded={isOpen}
           selected={selected}
+          dnd={dnd}
+          dropTarget={dropTarget}
           onClick={() => clickNode(ctx, key, selected, () => actions.selectFolder(folder.id))}
           onToggle={() => onToggle(key)}
           onContextMenu={(e) => openMenu(e, menuItems)}
@@ -306,6 +327,13 @@ function FolderBranch({ node, depth, ctx }: { node: FolderNode; depth: number; c
 
 function ItemRow({ item, depth, ctx }: { item: ItemSummary; depth: number; ctx: Context }) {
   const { selection, actions, openMenu } = ctx;
+  const parent = { projectId: item.projectId, folderId: item.folderId };
+  // Dropping onto an item lands in the item's folder, so the whole open folder is a target.
+  const dnd = useTreeNode({
+    id: `item:${item.id}`,
+    subject: { kind: "item", id: item.id, label: item.title, icon: itemIcon(item), from: parent },
+    drop: { target: parent },
+  });
   const menuItems: MenuItem[] = [
     { label: "Duplicate", icon: CopyPlus, onSelect: () => actions.duplicateItem(item.id) },
     {
@@ -321,6 +349,7 @@ function ItemRow({ item, depth, ctx }: { item: ItemSummary; depth: number; ctx: 
       depth={depth}
       icon={itemIcon(item)}
       label={item.title}
+      dnd={dnd}
       selected={selection?.kind === "item" && selection.id === item.id}
       onClick={() => actions.openItem(item)}
       onContextMenu={(e) => openMenu(e, menuItems)}

@@ -47,5 +47,10 @@ export function useSession() {
     [unlock],
   );
 
-  return { entered: info.entered, unlocked, remainingMs, unlock, lock, withUnlock };
+  /** Asks for Touch ID first if the window is closed. Use before entering any edit mode. */
+  const ensureUnlocked = useCallback(async () => {
+    if (info.expiresAt === null || info.expiresAt <= Date.now()) await unlock();
+  }, [info.expiresAt, unlock]);
+
+  return { entered: info.entered, unlocked, remainingMs, unlock, lock, withUnlock, ensureUnlocked };
 }

@@ -9,6 +9,8 @@ export type VaultActions = {
   selectFolder: (id: number) => void;
   selectTag: (path: string) => void;
   openItem: (item: ItemSummary) => void;
+  /** Runs `then` once the unlock window is open, asking for Touch ID if needed. */
+  guard: (then: () => void) => void;
   newItem: (projectId: number, folderId: number | null) => void;
 
   createProject: (name: string) => void;
@@ -20,7 +22,9 @@ export type VaultActions = {
   createFolder: (projectId: number, parentId: number | null, name: string) => void;
   renameFolder: (id: number, name: string) => void;
   deleteFolder: (id: number) => void;
+  moveFolder: (id: number, projectId: number, parentId: number | null) => void;
 
   duplicateItem: (id: number) => void;
   deleteItem: (id: number) => void;
+  moveItem: (id: number, projectId: number, folderId: number | null) => void;
 };

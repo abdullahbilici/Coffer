@@ -59,6 +59,53 @@ pub fn rename(conn: &Connection, id: i64, name: &str) -> AppResult<()> {
     expect_changed(changed)
 }
 
+/// The folder and every folder nested below it.
+pub fn subtree(conn: &Connection, id: i64) -> AppResult<Vec<i64>> {
+    let mut stmt = conn.prepare(
+        "WITH RECURSIVE sub(id) AS (
+             SELECT id FROM folders WHERE id = ?1
+             UNION ALL
+             SELECT f.id FROM folders f JOIN sub ON f.parent_id = sub.id
+         )
+         SELECT id FROM sub",
+    )?;
+    let rows = stmt.query_map([id], |row| row.get(0))?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+/// Moves a folder under `parent_id` (or the project root). When the project changes, every
+/// nested folder and item moves with it. The caller rejects moves into the folder's own subtree.
+pub fn move_to(
+    conn: &Connection,
+    id: i64,
+    project_id: i64,
+    parent_id: Option<i64>,
+) -> AppResult<()> {
+    let tx = conn.unchecked_transaction()?;
+    let changed = tx.execute(
+        "UPDATE folders SET project_id = ?2, parent_id = ?3 WHERE id = ?1",
+        params![id, project_id, parent_id],
+    )?;
+    expect_changed(changed)?;
+    let subtree = "WITH RECURSIVE sub(id) AS (
+             SELECT ?1
+             UNION ALL
+             SELECT f.id FROM folders f JOIN sub ON f.parent_id = sub.id
+         )";
+    tx.execute(
+        &format!("{subtree} UPDATE folders SET project_id = ?2 WHERE id IN (SELECT id FROM sub)"),
+        params![id, project_id],
+    )?;
+    tx.execute(
+        &format!(
+            "{subtree} UPDATE items SET project_id = ?2 WHERE folder_id IN (SELECT id FROM sub)"
+        ),
+        params![id, project_id],
+    )?;
+    tx.commit()?;
+    Ok(())
+}
+
 /// Deletes the folder with all nested folders and items.
 pub fn delete(conn: &Connection, id: i64) -> AppResult<()> {
     conn.execute("DELETE FROM folders WHERE id = ?1", [id])?;

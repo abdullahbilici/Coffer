@@ -41,10 +41,12 @@ pub fn run() {
             projects::delete_project,
             folders::create_folder,
             folders::rename_folder,
+            folders::move_folder,
             folders::delete_folder,
             items::get_item,
             items::reveal_item,
             items::save_item,
+            items::move_item,
             items::duplicate_item,
             items::delete_item,
         ])

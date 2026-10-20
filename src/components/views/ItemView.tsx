@@ -1,31 +1,13 @@
 import { useEffect, useState } from "react";
-import {
-  Box,
-  Copy,
-  CopyPlus,
-  Eye,
-  EyeOff,
-  KeyRound,
-  LockKeyhole,
-  Pencil,
-  Trash2,
-} from "lucide-react";
+import { Box, CopyPlus, KeyRound, Pencil, Trash2 } from "lucide-react";
 import type { Run, VaultActions } from "../../app/actions";
 import type { Session } from "../../hooks/useSession";
 import { api, type Item, type SaveItemInput, type Tree } from "../../lib/api";
-import {
-  parseBody,
-  parseCopyable,
-  parseTemplate,
-  secretValues,
-  toPlainText,
-} from "../../lib/markup";
 import { locationLabel } from "../../lib/tree";
 import { Button } from "../ui/Button";
-import { InlineBody } from "./InlineBody";
+import { ItemBody } from "./ItemBody";
 import { ItemEditor } from "./ItemEditor";
 import { TagList } from "./TagList";
-import styles from "./ItemView.module.css";
 import viewStyles from "./View.module.css";
 
 type Props = {
@@ -39,72 +21,30 @@ type Props = {
   onCopy: (text: string) => Promise<void>;
 };
 
-/** Secret index used for the whole body of a secure item. */
-const WHOLE_BODY = 0;
-
 const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 
 export function ItemView({ itemId, tree, session, run, actions, onSave, onCopy }: Props) {
   const [item, setItem] = useState<Item | null>(null);
   const [editing, setEditing] = useState<SaveItemInput | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  // Decrypted body, fetched on the first unhide/copy. Lives only as long as this view.
-  const [plaintext, setPlaintext] = useState<string | null>(null);
-  const [shown, setShown] = useState<ReadonlySet<number>>(() => new Set());
-
   const summary = tree.items.find((i) => i.id === itemId);
 
   // Refetch whenever the tree reports a newer version; skip once the item is gone.
   const version = summary?.updatedAt;
   useEffect(() => {
     if (version === undefined) return;
-    setPlaintext(null);
-    setShown(new Set());
     void run(async () => setItem(await api.getItem(itemId)));
   }, [itemId, version, run]);
 
-  // Drop decrypted content as soon as the unlock window closes.
-  useEffect(() => {
-    if (session.unlocked) return;
-    setPlaintext(null);
-    setShown(new Set());
-  }, [session.unlocked]);
-
   if (!item || !summary) return null;
-
-  const isProtected = item.secure || item.hasSecrets;
-
-  /** The full body; asks for Touch ID only when the unlock window is closed. */
-  const fullBody = async (): Promise<string> => {
-    if (!isProtected) return item.body ?? "";
-    if (plaintext !== null) return plaintext;
-    const body = await session.withUnlock(() => api.revealItem(item.id));
-    setPlaintext(body);
-    return body;
-  };
-
-  const toggleSecret = (index: number) =>
-    run(async () => {
-      if (!shown.has(index)) await fullBody();
-      setShown((prev) => {
-        const next = new Set(prev);
-        if (!next.delete(index)) next.add(index);
-        return next;
-      });
-    });
-
-  const copySecret = (index: number) =>
-    run(async () => {
-      const body = await fullBody();
-      const value = item.secure ? body : secretValues(body)[index];
-      if (value !== undefined) await onCopy(value);
-    });
-
-  const copyAll = () => run(async () => onCopy(toPlainText(await fullBody())));
 
   const startEdit = () =>
     run(async () => {
-      const body = await fullBody();
+      await session.ensureUnlocked();
+      const body =
+        item.secure || item.hasSecrets
+          ? await session.withUnlock(() => api.revealItem(item.id))
+          : (item.body ?? "");
       setEditing({
         id: item.id,
         projectId: item.projectId,
@@ -131,13 +71,6 @@ export function ItemView({ itemId, tree, session, run, actions, onSave, onCopy }
       />
     );
   }
-
-  const segments = item.secure
-    ? parseCopyable(plaintext ?? "")
-    : item.hasSecrets && plaintext !== null
-      ? parseBody(plaintext)
-      : parseTemplate(item.body ?? "");
-  const bodyHidden = item.secure && !shown.has(WHOLE_BODY);
 
   return (
     <div className={viewStyles.view}>
@@ -184,39 +117,7 @@ export function ItemView({ itemId, tree, session, run, actions, onSave, onCopy }
 
         {item.tags.length > 0 && <TagList tags={item.tags} onSelect={actions.selectTag} />}
 
-        <div className={styles.body}>
-          <div className={styles.bodyToolbar}>
-            {item.secure && (
-              <Button
-                variant="ghost"
-                size="sm"
-                icon={bodyHidden ? Eye : EyeOff}
-                onClick={() => toggleSecret(WHOLE_BODY)}
-              >
-                {bodyHidden ? "Unhide" : "Hide"}
-              </Button>
-            )}
-            <Button variant="ghost" size="sm" icon={Copy} onClick={copyAll}>
-              Copy all
-            </Button>
-          </div>
-          {bodyHidden ? (
-            <div className={styles.hidden}>
-              <span className={styles.mask}>
-                <LockKeyhole size={12} strokeWidth={2} />
-                hidden
-              </span>
-            </div>
-          ) : (
-            <InlineBody
-              segments={segments}
-              shown={shown}
-              onToggleSecret={toggleSecret}
-              onCopySecret={copySecret}
-              onCopyText={(text) => void run(() => onCopy(text))}
-            />
-          )}
-        </div>
+        <ItemBody key={item.updatedAt} item={item} session={session} run={run} onCopy={onCopy} />
 
         <p className={viewStyles.meta}>Updated {dateFormat.format(item.updatedAt)}</p>
       </div>

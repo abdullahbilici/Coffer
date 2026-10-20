@@ -1,0 +1,157 @@
+.header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.filters {
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-1);
+  padding: 3px;
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-subtle);
+}
+
+.filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  transition:
+    background var(--duration-base) var(--ease-out),
+    color var(--duration-base) var(--ease-out),
+    box-shadow var(--duration-base) var(--ease-out);
+}
+
+.filter:hover {
+  color: var(--color-text);
+}
+
+.filter[aria-pressed="true"] {
+  background: var(--color-bg-elevated);
+  box-shadow: var(--shadow-raised);
+  color: var(--color-text);
+}
+
+.filterCount {
+  color: var(--color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.empty {
+  color: var(--color-text-tertiary);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  list-style: none;
+  overflow: hidden;
+}
+
+.entry + .entry {
+  border-top: 1px solid var(--color-border);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: none;
+  background: transparent;
+  text-align: left;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.row:hover {
+  background: var(--color-bg-hover);
+}
+
+.icon {
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+}
+
+.text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.title {
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subtitle {
+  color: var(--color-text-tertiary);
+  font-size: var(--text-sm);
+}
+
+/* TagList adds block margins for the item header; reset them here. */
+.tags ul {
+  justify-content: flex-end;
+  margin: 0;
+}
+
+.trail {
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+}
+
+.chevron {
+  transition: transform var(--duration-base) var(--ease-out);
+}
+
+.entryOpen .chevron {
+  transform: rotate(180deg);
+}
+
+/* Height animation via grid rows: 0fr collapses, 1fr fits the content. */
+.panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--duration-slow) var(--ease-out);
+}
+
+.entryOpen .panel {
+  grid-template-rows: 1fr;
+}
+
+.panelInner {
+  min-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity var(--duration-base) var(--ease-out);
+}
+
+.entryOpen .panelInner {
+  opacity: 1;
+}
+
+.preview {
+  padding: 0 var(--space-4) var(--space-3) calc(var(--space-4) + 20px + var(--space-3));
+}
+
+.previewFooter {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-2);
+}
