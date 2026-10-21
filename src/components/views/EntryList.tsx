@@ -1,6 +1,7 @@
-import { Pin, type LucideIcon } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { cx } from "../../lib/cx";
 import { TagList } from "./TagList";
+import { PinBadge } from "../ui/PinBadge";
 import styles from "./EntryList.module.css";
 
 export type Entry = {
@@ -35,9 +36,7 @@ export function EntryList({ entries, emptyText, onSelectTag }: Props) {
           <div className={styles.text}>
             <span className={styles.title}>
               {title}
-              {pinned && (
-                <Pin size={12} strokeWidth={2} className={styles.pin} aria-label="Pinned" />
-              )}
+              {pinned && <PinBadge className={styles.pin} />}
             </span>
             {subtitle && <span className={styles.location}>{subtitle}</span>}
           </div>

@@ -19,9 +19,10 @@ import { nodeKey, type Selection } from "../../lib/selection";
 import type { FolderNode, ProjectNode } from "../../lib/tree";
 import { itemIcon } from "../itemIcon";
 import { IconButton } from "../ui/IconButton";
-import { Menu, type MenuAnchor, type MenuItem } from "../ui/Menu";
-import { sameTarget, useTreeDnd, useTreeNode } from "./TreeDnd";
+import { CONFIRM_DELETE, Menu, type MenuAnchor, type MenuItem } from "../ui/Menu";
+import { PinBadge } from "../ui/PinBadge";
 import { Collapse } from "../ui/Collapse";
+import { sameTarget, useTreeDnd, useTreeNode } from "./TreeDnd";
 import { TreeEditRow, TreeRow } from "./TreeRow";
 import styles from "./Sidebar.module.css";
 
@@ -58,10 +59,6 @@ function pinMenuItem(ctx: Context, kind: PinKind, id: number): MenuItem {
     onSelect: () => ctx.actions.setPinned({ kind, id }, !pinned),
   };
 }
-
-/** Small pin shown at the right of pinned rows (hover actions replace it). */
-const pinBadge = (pinned: boolean) =>
-  pinned ? <Pin size={12} strokeWidth={2} aria-label="Pinned" /> : undefined;
 
 /** First click selects and opens a node; clicking the selected node again toggles it. */
 function clickNode(ctx: Context, key: string, selected: boolean, select: () => void) {
@@ -108,7 +105,7 @@ export function ProjectTree(props: Props) {
         />
       )}
       {pinnedFirst(nodes, (n) => props.isPinned("project", n.project.id)).map((node) => (
-        <ProjectBranch key={node.project.id} node={node} ctx={ctx} />
+        <ContainerBranch key={node.project.id} spec={projectSpec(node)} ctx={ctx} />
       ))}
       {nodes.length === 0 && edit?.type !== "createProject" && (
         <p className={styles.empty}>No projects</p>
@@ -118,67 +115,124 @@ export function ProjectTree(props: Props) {
   );
 }
 
-function ProjectBranch({ node, ctx }: { node: ProjectNode; ctx: Context }) {
-  const { project } = node;
+type BranchSpec = {
+  kind: "project" | "folder";
+  id: number;
+  name: string;
+  projectId: number;
+  /** This container's folder id; `null` for a project root. */
+  folderId: number | null;
+  /** For folders: the folder it currently lives in, so dropping back there is a no-op. */
+  parentId: number | null;
+  folders: FolderNode[];
+  items: ItemSummary[];
+  depth: number;
+};
+
+const projectSpec = (node: ProjectNode): BranchSpec => ({
+  kind: "project",
+  id: node.project.id,
+  name: node.project.name,
+  projectId: node.project.id,
+  folderId: null,
+  parentId: null,
+  folders: node.folders,
+  items: node.items,
+  depth: 0,
+});
+
+const folderSpec = (node: FolderNode, depth: number): BranchSpec => ({
+  kind: "folder",
+  id: node.folder.id,
+  name: node.folder.name,
+  projectId: node.folder.projectId,
+  folderId: node.folder.id,
+  parentId: node.folder.parentId,
+  folders: node.folders,
+  items: node.items,
+  depth,
+});
+
+/** A project or folder row with its children; both behave the same except where noted. */
+function ContainerBranch({ spec, ctx }: { spec: BranchSpec; ctx: Context }) {
+  const { kind, id, name, projectId, folderId, depth } = spec;
   const { expanded, selection, edit, onEdit, onToggle, onExpand, actions, openMenu } = ctx;
-  const key = nodeKey.project(project.id);
+  const isProject = kind === "project";
+  const key = isProject ? nodeKey.project(id) : nodeKey.folder(id);
   const isOpen = expanded.has(key);
-  const selected = selection?.kind === "project" && selection.id === project.id;
-  const here = { projectId: project.id, folderId: null };
+  const selected = selection?.kind === kind && selection.id === id;
+  const here = { projectId, folderId };
   const dnd = useTreeNode({
     id: key,
-    drop: { target: here, label: project.name, rowId: key, expandKey: key },
+    // Projects are drop targets only; folders can also be dragged.
+    subject: isProject
+      ? undefined
+      : {
+          kind: "folder",
+          id,
+          label: name,
+          icon: Folder,
+          from: { projectId, folderId: spec.parentId },
+        },
+    drop: { target: here, label: name, rowId: key, expandKey: key },
   });
   const dropTarget = sameTarget(useTreeDnd().target, here);
 
-  const newFolder = () => actions.startCreateFolder(project.id, null);
+  const renameEdit: TreeEdit = isProject
+    ? { type: "renameProject", id }
+    : { type: "renameFolder", id };
+  const renaming = edit?.type === renameEdit.type && "id" in edit && edit.id === id;
+  const icon = isProject ? Box : isOpen ? FolderOpen : Folder;
+
+  const newFolder = () => actions.startCreateFolder(projectId, folderId);
   const newItem = () => {
     onExpand([key]);
-    actions.newItem(project.id, null);
+    actions.newItem(projectId, folderId);
   };
   const menuItems: MenuItem[] = [
-    pinMenuItem(ctx, "project", project.id),
+    pinMenuItem(ctx, kind, id),
     { label: "New item", icon: FilePlus, onSelect: newItem },
     { label: "New folder", icon: FolderPlus, onSelect: newFolder },
+    { label: "Rename", icon: Pencil, onSelect: () => actions.guard(() => onEdit(renameEdit)) },
     {
-      label: "Rename",
-      icon: Pencil,
-      onSelect: () => actions.guard(() => onEdit({ type: "renameProject", id: project.id })),
-    },
-    {
-      label: "Delete project",
+      label: isProject ? "Delete project" : "Delete folder",
       icon: Trash2,
       danger: true,
-      confirmLabel: "Delete with all items",
-      onSelect: () => actions.deleteProject(project.id),
+      confirmLabel: CONFIRM_DELETE,
+      onSelect: () => (isProject ? actions.deleteProject(id) : actions.deleteFolder(id)),
     },
   ];
 
   return (
     <Collapse leaving={ctx.deleting.has(key)}>
-      {edit?.type === "renameProject" && edit.id === project.id ? (
+      {renaming ? (
         <TreeEditRow
-          depth={0}
-          icon={Box}
-          initialValue={project.name}
-          placeholder="Project name"
-          onSubmit={(name) => {
+          depth={depth}
+          icon={isProject ? Box : Folder}
+          initialValue={name}
+          placeholder={isProject ? "Project name" : "Folder name"}
+          onSubmit={(next) => {
             onEdit(null);
-            actions.renameProject(project.id, name);
+            if (isProject) actions.renameProject(id, next);
+            else actions.renameFolder(id, next);
           }}
           onCancel={() => onEdit(null)}
         />
       ) : (
         <TreeRow
-          depth={0}
-          icon={Box}
-          label={project.name}
-          trailing={pinBadge(ctx.isPinned("project", project.id))}
+          depth={depth}
+          icon={icon}
+          label={name}
+          trailing={ctx.isPinned(kind, id) ? <PinBadge /> : undefined}
           expanded={isOpen}
           selected={selected}
           dnd={dnd}
           dropTarget={dropTarget}
-          onClick={() => clickNode(ctx, key, selected, () => actions.selectProject(project.id))}
+          onClick={() =>
+            clickNode(ctx, key, selected, () =>
+              isProject ? actions.selectProject(id) : actions.selectFolder(id),
+            )
+          }
           onToggle={() => onToggle(key)}
           onContextMenu={(e) => openMenu(e, menuItems)}
           actions={
@@ -197,12 +251,12 @@ function ProjectBranch({ node, ctx }: { node: ProjectNode; ctx: Context }) {
       )}
       {isOpen && (
         <Children
-          folders={node.folders}
-          items={node.items}
-          projectId={project.id}
-          parentId={null}
-          container={{ rowId: key, label: project.name }}
-          depth={1}
+          folders={spec.folders}
+          items={spec.items}
+          projectId={projectId}
+          parentId={folderId}
+          container={{ rowId: key, label: name }}
+          depth={depth + 1}
           ctx={ctx}
         />
       )}
@@ -245,7 +299,7 @@ function Children({ folders, items, projectId, parentId, container, depth, ctx }
         />
       )}
       {pinnedFirst(folders, (n) => ctx.isPinned("folder", n.folder.id)).map((node) => (
-        <FolderBranch key={node.folder.id} node={node} depth={depth} ctx={ctx} />
+        <ContainerBranch key={node.folder.id} spec={folderSpec(node, depth)} ctx={ctx} />
       ))}
       {pinnedFirst(items, (i) => ctx.isPinned("item", i.id)).map((item) => (
         <ItemRow key={item.id} item={item} container={container} depth={depth} ctx={ctx} />
@@ -256,105 +310,6 @@ function Children({ folders, items, projectId, parentId, container, depth, ctx }
         </p>
       )}
     </>
-  );
-}
-
-function FolderBranch({ node, depth, ctx }: { node: FolderNode; depth: number; ctx: Context }) {
-  const { folder } = node;
-  const { expanded, selection, edit, onEdit, onToggle, onExpand, actions, openMenu } = ctx;
-  const key = nodeKey.folder(folder.id);
-  const isOpen = expanded.has(key);
-  const selected = selection?.kind === "folder" && selection.id === folder.id;
-  const here = { projectId: folder.projectId, folderId: folder.id };
-  const dnd = useTreeNode({
-    id: key,
-    subject: {
-      kind: "folder",
-      id: folder.id,
-      label: folder.name,
-      icon: Folder,
-      from: { projectId: folder.projectId, folderId: folder.parentId },
-    },
-    drop: { target: here, label: folder.name, rowId: key, expandKey: key },
-  });
-  const dropTarget = sameTarget(useTreeDnd().target, here);
-
-  const newFolder = () => actions.startCreateFolder(folder.projectId, folder.id);
-  const newItem = () => {
-    onExpand([key]);
-    actions.newItem(folder.projectId, folder.id);
-  };
-  const menuItems: MenuItem[] = [
-    pinMenuItem(ctx, "folder", folder.id),
-    { label: "New item", icon: FilePlus, onSelect: newItem },
-    { label: "New folder", icon: FolderPlus, onSelect: newFolder },
-    {
-      label: "Rename",
-      icon: Pencil,
-      onSelect: () => actions.guard(() => onEdit({ type: "renameFolder", id: folder.id })),
-    },
-    {
-      label: "Delete folder",
-      icon: Trash2,
-      danger: true,
-      confirmLabel: "Delete with all items",
-      onSelect: () => actions.deleteFolder(folder.id),
-    },
-  ];
-
-  return (
-    <Collapse leaving={ctx.deleting.has(key)}>
-      {edit?.type === "renameFolder" && edit.id === folder.id ? (
-        <TreeEditRow
-          depth={depth}
-          icon={Folder}
-          initialValue={folder.name}
-          placeholder="Folder name"
-          onSubmit={(name) => {
-            onEdit(null);
-            actions.renameFolder(folder.id, name);
-          }}
-          onCancel={() => onEdit(null)}
-        />
-      ) : (
-        <TreeRow
-          depth={depth}
-          icon={isOpen ? FolderOpen : Folder}
-          label={folder.name}
-          trailing={pinBadge(ctx.isPinned("folder", folder.id))}
-          expanded={isOpen}
-          selected={selected}
-          dnd={dnd}
-          dropTarget={dropTarget}
-          onClick={() => clickNode(ctx, key, selected, () => actions.selectFolder(folder.id))}
-          onToggle={() => onToggle(key)}
-          onContextMenu={(e) => openMenu(e, menuItems)}
-          actions={
-            <>
-              <IconButton icon={FilePlus} label="New item" size="sm" onClick={newItem} />
-              <IconButton icon={FolderPlus} label="New folder" size="sm" onClick={newFolder} />
-              <IconButton
-                icon={Ellipsis}
-                label="More"
-                size="sm"
-                onClick={(e) => openMenu(e, menuItems)}
-              />
-            </>
-          }
-        />
-      )}
-      {isOpen && (
-        <Children
-          folders={node.folders}
-          items={node.items}
-          projectId={folder.projectId}
-          parentId={folder.id}
-          container={{ rowId: key, label: folder.name }}
-          depth={depth + 1}
-          ctx={ctx}
-        />
-      )}
-    </Collapse>
   );
 }
 
@@ -376,7 +331,7 @@ function ItemRow({ item, container, depth, ctx }: ItemRowProps) {
       label: "Delete item",
       icon: Trash2,
       danger: true,
-      confirmLabel: "Click again to delete",
+      confirmLabel: CONFIRM_DELETE,
       onSelect: () => actions.deleteItem(item.id),
     },
   ];
@@ -386,7 +341,7 @@ function ItemRow({ item, container, depth, ctx }: ItemRowProps) {
         depth={depth}
         icon={itemIcon(item)}
         label={item.title}
-        trailing={pinBadge(ctx.isPinned("item", item.id))}
+        trailing={ctx.isPinned("item", item.id) ? <PinBadge /> : undefined}
         dnd={dnd}
         selected={selection?.kind === "item" && selection.id === item.id}
         onClick={() => actions.openItem(item)}

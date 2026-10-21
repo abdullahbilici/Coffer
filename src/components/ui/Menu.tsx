@@ -4,6 +4,9 @@ import type { LucideIcon } from "lucide-react";
 import { cx } from "../../lib/cx";
 import styles from "./Menu.module.css";
 
+/** Second-click label for every destructive menu entry. */
+export const CONFIRM_DELETE = "Confirm delete";
+
 export type MenuItem = {
   label: string;
   icon: LucideIcon;

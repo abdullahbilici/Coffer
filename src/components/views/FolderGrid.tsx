@@ -1,5 +1,6 @@
-import { Folder, Pin } from "lucide-react";
+import { Folder } from "lucide-react";
 import type { Folder as FolderModel } from "../../lib/api";
+import { PinBadge } from "../ui/PinBadge";
 import styles from "./FolderGrid.module.css";
 
 type Props = {
@@ -23,9 +24,7 @@ export function FolderGrid({ folders, describe, isPinned, onOpen }: Props) {
             <span className={styles.text}>
               <span className={styles.name}>
                 {folder.name}
-                {isPinned(folder) && (
-                  <Pin size={12} strokeWidth={2} className={styles.pin} aria-label="Pinned" />
-                )}
+                {isPinned(folder) && <PinBadge className={styles.pin} />}
               </span>
               <span className={styles.meta}>{describe(folder)}</span>
             </span>
