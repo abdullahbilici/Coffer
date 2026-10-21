@@ -39,6 +39,10 @@ export function SplitPanes({ panes }: { panes: Pane[] }) {
 
   const isOpen = (pane: Pane) => !layout.collapsed.includes(pane.id);
   const weight = (pane: Pane) => layout.weights[pane.id] ?? pane.defaultWeight;
+  // Open panes share all the free height: flex-grow values summing below 1 would leave a gap
+  // (a lone open pane at weight 0.5 fills only half), so they are normalised to sum to 1.
+  const openWeight = panes.filter(isOpen).reduce((sum, pane) => sum + weight(pane), 0);
+  const grow = (pane: Pane) => (isOpen(pane) && openWeight > 0 ? weight(pane) / openWeight : 0);
 
   const toggle = (id: string) =>
     setLayout((l) => ({
@@ -94,7 +98,7 @@ export function SplitPanes({ panes }: { panes: Pane[] }) {
             }}
             pane={pane}
             open={open}
-            grow={open ? weight(pane) : 0}
+            grow={grow(pane)}
             onResize={above ? startResize(above, pane) : undefined}
             onToggle={() => toggle(pane.id)}
           />
