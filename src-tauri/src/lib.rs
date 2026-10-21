@@ -16,6 +16,13 @@ use tauri::Manager;
 use commands::{folders, items, pins, projects, session as session_cmd, vault};
 use state::AppState;
 
+/// Dev builds keep their own vault file, so testing (and `npm run reseed`) never touches the
+/// real one. Both share the Keychain key.
+#[cfg(debug_assertions)]
+const DB_FILE: &str = "coffer-dev.db";
+#[cfg(not(debug_assertions))]
+const DB_FILE: &str = "coffer.db";
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -23,7 +30,7 @@ pub fn run() {
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
-            let conn = db::open(&dir.join("coffer.db"))?;
+            let conn = db::open(&dir.join(DB_FILE))?;
             app.manage(AppState::new(conn));
             lock_events::observe(app.handle());
             Ok(())
