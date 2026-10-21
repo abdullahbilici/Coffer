@@ -119,15 +119,16 @@
 }
 
 /* Dragged pin: the row itself, lifted. Landing flattens it to match the real row. */
-.pinGhost {
+/* The overlay carries the lifted surface; its drop keyframes fade it into the row. */
+.pinOverlay {
   border-radius: var(--radius-md);
   background: var(--color-bg-elevated);
   box-shadow: var(--shadow-popover);
+}
+
+.pinGhost {
   transform: rotate(-1deg) scale(1.02);
-  transition:
-    transform var(--duration-base) var(--ease-out),
-    box-shadow var(--duration-base) var(--ease-out),
-    background var(--duration-base) var(--ease-out);
+  transition: transform var(--duration-base) var(--ease-out);
 }
 
 /* The overlay is exactly the row's size; the row's own side margins would overflow it. */
@@ -137,7 +138,5 @@
 }
 
 .landing {
-  background: transparent;
-  box-shadow: none;
   transform: none;
 }

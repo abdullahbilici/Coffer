@@ -88,6 +88,11 @@
   }
 }
 
+/* Moving a DOM node restarts its CSS animation; reordered rows must not grow in again. */
+.settled {
+  animation: none;
+}
+
 .leaving {
   overflow: hidden;
   pointer-events: none;

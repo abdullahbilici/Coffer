@@ -168,8 +168,30 @@ export function PinnedList({ tree, selection, actions }: Props) {
   const dropAnimation: DropAnimation = {
     duration: baseMs,
     easing,
+    // Lifted surface melts into the row's own background as it lands.
+    keyframes: ({ transform: { initial, final } }) => {
+      const css = getComputedStyle(document.documentElement);
+      return [
+        {
+          transform: `translate3d(${initial.x}px, ${initial.y}px, 0)`,
+          backgroundColor: css.getPropertyValue("--color-bg-elevated"),
+          boxShadow: css.getPropertyValue("--shadow-popover"),
+        },
+        {
+          transform: `translate3d(${final.x}px, ${final.y}px, 0)`,
+          backgroundColor: "transparent",
+          boxShadow: "none",
+        },
+      ];
+    },
     sideEffects: defaultDropAnimationSideEffects({ styles: { active: { opacity: "0" } } }),
   };
+
+  // Only rows that are new to the list grow in; rows that just moved stay put.
+  const seen = useRef(new Set<string>());
+  useEffect(() => {
+    seen.current = new Set(order);
+  });
   return (
     <DndContext
       sensors={sensors}
@@ -188,6 +210,7 @@ export function PinnedList({ tree, selection, actions }: Props) {
             key={pinKey(entry.pin)}
             entry={entry}
             leaving={leaving}
+            settled={seen.current.has(pinKey(entry.pin))}
             // The insertion line shows on the side the row will land.
             insert={
               pinKey(entry.pin) === over && from !== -1 && from !== to
@@ -205,7 +228,7 @@ export function PinnedList({ tree, selection, actions }: Props) {
           />
         ))}
       </div>
-      <DragOverlay dropAnimation={dropAnimation}>
+      <DragOverlay dropAnimation={dropAnimation} className={styles.pinOverlay}>
         {ghost && (
           // A copy of the row itself: lifted while dragging, flat again as it lands, so it
           // matches the real row exactly when they swap.
@@ -236,12 +259,13 @@ export function PinnedList({ tree, selection, actions }: Props) {
 type RowProps = {
   entry: Resolved;
   leaving: boolean;
+  settled: boolean;
   insert: "before" | "after" | null;
   onMenu: (event: MouseEvent) => void;
   onUnpin: () => void;
 };
 
-function PinnedRow({ entry, leaving, insert, onMenu, onUnpin }: RowProps) {
+function PinnedRow({ entry, leaving, settled, insert, onMenu, onUnpin }: RowProps) {
   const id = pinKey(entry.pin);
   const draggable = useDraggable({ id });
   const droppable = useDroppable({ id });
@@ -251,6 +275,7 @@ function PinnedRow({ entry, leaving, insert, onMenu, onUnpin }: RowProps) {
         depth={0}
         icon={entry.icon}
         label={entry.label}
+        settled={settled}
         selected={entry.selected}
         trailing={entry.location || undefined}
         onClick={entry.open}

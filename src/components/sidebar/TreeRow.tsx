@@ -24,6 +24,8 @@ type Props = {
   dnd?: ReturnType<typeof useTreeNode>;
   /** Highlights the row as the place a drag will land. */
   dropTarget?: boolean;
+  /** Skips the grow-in animation, e.g. for a row that only changed position. */
+  settled?: boolean;
 };
 
 export function TreeRow({
@@ -39,6 +41,7 @@ export function TreeRow({
   trailing,
   dnd,
   dropTarget,
+  settled,
 }: Props) {
   const expandable = expanded !== undefined;
   return (
@@ -55,6 +58,7 @@ export function TreeRow({
         dnd?.isDragging && styles.dragging,
         dnd?.leaving && styles.leaving,
         dropTarget && styles.dropTarget,
+        settled && styles.settled,
       )}
       style={{ paddingLeft: 8 + depth * INDENT_PX }}
       onClick={onClick}
