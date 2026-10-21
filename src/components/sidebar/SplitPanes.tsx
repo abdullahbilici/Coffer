@@ -151,7 +151,9 @@ function PaneView({ ref, pane, open, cap, onResize, onToggle }: PaneViewProps) {
       {/* Grid rows animate between 0fr and 1fr, so the body opens to exactly its content.
           `inert` keeps a collapsed pane's content out of focus and clicks. */}
       <div className={styles.bodyWrap} inert={!open}>
-        <div className={styles.body}>{pane.children}</div>
+        <div className={styles.body}>
+          <div className={styles.content}>{pane.children}</div>
+        </div>
       </div>
     </section>
   );

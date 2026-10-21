@@ -107,13 +107,12 @@
 }
 
 /* Content-sized panes keep some air below their last row, and never shrink to less than about
-   two rows, so each pane's boundary reads clearly even when it's nearly empty. */
-.sized .body {
-  padding-bottom: var(--space-4);
-}
-
-.sized.open .body {
+   two rows, so each pane's boundary reads clearly even when it's nearly empty. This sits on the
+   inner content: padding on the collapsing body itself can't shrink to zero, so it would leave
+   a gap under a closed pane. */
+.sized .content {
   min-height: 64px;
+  padding-bottom: var(--space-4);
 }
 
 .body {
@@ -121,7 +120,6 @@
   /* Always-present (transparent) scrollbar track, so rows never shift when content overflows.
      scrollbar-gutter misreserves space with WebKit's custom scrollbars. */
   overflow-y: scroll;
-  padding-bottom: var(--space-2);
   transition: opacity var(--duration-slow) var(--ease-out);
 }
 
@@ -155,4 +153,8 @@
 .divider:hover::after,
 .resizing .divider::after {
   background: var(--color-accent);
+}
+
+.fill .content {
+  padding-bottom: var(--space-2);
 }
