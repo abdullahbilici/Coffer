@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import type { SaveItemInput, Tree } from "../../lib/api";
-import { handleMarkupKeys } from "../../lib/textarea";
+import { handleEditorKeys, handleMarkupKeys } from "../../lib/textarea";
 import { folderOptions } from "../../lib/tree";
 import { Button } from "../ui/Button";
 import { TextArea } from "../ui/Input";
@@ -50,16 +50,7 @@ export function ItemEditor({ tree, initial, heading, onSave, onCancel }: Props) 
   return (
     <div
       className={viewStyles.view}
-      onKeyDown={(e) => {
-        if (e.metaKey && e.key === "s") {
-          e.preventDefault();
-          void save();
-        }
-        if (e.key === "Escape") {
-          e.preventDefault();
-          onCancel();
-        }
-      }}
+      onKeyDown={(e) => handleEditorKeys(e, { save: () => void save(), cancel: onCancel })}
     >
       <div className={viewStyles.dragbar} data-tauri-drag-region />
       <div className={viewStyles.inner}>

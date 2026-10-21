@@ -66,3 +66,15 @@ export function handleMarkupKeys(
   event.preventDefault();
   return true;
 }
+
+/** Cmd+S saves and Esc cancels in an editor. Returns true when the key was handled. */
+export function handleEditorKeys(
+  event: KeyboardEvent<HTMLElement>,
+  { save, cancel }: { save: () => void; cancel: () => void },
+): boolean {
+  if (event.metaKey && event.key.toLowerCase() === "s") save();
+  else if (event.key === "Escape") cancel();
+  else return false;
+  event.preventDefault();
+  return true;
+}

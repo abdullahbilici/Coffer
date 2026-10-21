@@ -1,6 +1,7 @@
 import { FilePlus, Folder, FolderPlus, LayoutGrid, List, Pencil } from "lucide-react";
 import type { Run, VaultActions } from "../../app/actions";
 import type { Session } from "../../hooks/useSession";
+import { useProjectOverview, type Overview } from "../../hooks/useProjectOverview";
 import { useStoredState } from "../../hooks/useStoredState";
 import type { Tree } from "../../lib/api";
 import { pinnedSet } from "../../lib/pins";
@@ -13,7 +14,7 @@ import { Select } from "../ui/Select";
 import { Breadcrumb, type Crumb } from "./Breadcrumb";
 import { EntryList, type Entry } from "./EntryList";
 import { FolderGrid } from "./FolderGrid";
-import { ProjectOverview, useProjectOverview, type Overview } from "./ProjectOverview";
+import { ProjectOverview } from "./ProjectOverview";
 import styles from "./ContainerView.module.css";
 import viewStyles from "./View.module.css";
 

@@ -1,11 +1,11 @@
-import { useEffect, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Copy, Eye, EyeOff, LockKeyhole } from "lucide-react";
 import type { Run } from "../../app/actions";
+import { useSecrets } from "../../hooks/useSecrets";
 import type { Session } from "../../hooks/useSession";
 import { api, type Item } from "../../lib/api";
-import { secretValues, toPlainText } from "../../lib/markup";
 import { Button } from "../ui/Button";
-import { Markdown, type MarkdownChips } from "./Markdown";
+import { Markdown } from "./Markdown";
 import styles from "./ItemBody.module.css";
 
 type Props = {
@@ -27,54 +27,19 @@ const WHOLE_BODY = 0;
  * Secrets open masked; decrypted text lives only as long as this component.
  */
 export function ItemBody({ item, session, run, onCopy, title }: Props) {
-  const [plaintext, setPlaintext] = useState<string | null>(null);
-  const [shown, setShown] = useState<ReadonlySet<number>>(() => new Set());
+  const { plaintext, shown, toggle, copyAll, chips } = useSecrets({
+    readable: item.body ?? "",
+    protected: item.secure || item.hasSecrets,
+    wholeBody: item.secure,
+    reveal: () => api.revealItem(item.id),
+    session,
+    run,
+    onCopy,
+  });
 
-  // Drop decrypted content as soon as the unlock window closes.
-  useEffect(() => {
-    if (session.unlocked) return;
-    setPlaintext(null);
-    setShown(new Set());
-  }, [session.unlocked]);
-
-  /** The full body; asks for Touch ID only when the unlock window is closed. */
-  const fullBody = async (): Promise<string> => {
-    if (!item.secure && !item.hasSecrets) return item.body ?? "";
-    if (plaintext !== null) return plaintext;
-    const body = await session.withUnlock(() => api.revealItem(item.id));
-    setPlaintext(body);
-    return body;
-  };
-
-  const toggleSecret = (index: number) =>
-    run(async () => {
-      if (!shown.has(index)) await fullBody();
-      setShown((prev) => {
-        const next = new Set(prev);
-        if (!next.delete(index)) next.add(index);
-        return next;
-      });
-    });
-
-  const copySecret = (index: number) =>
-    run(async () => {
-      const body = await fullBody();
-      const value = item.secure ? body : secretValues(body)[index];
-      if (value !== undefined) await onCopy(value);
-    });
-
-  const copyAll = () => run(async () => onCopy(toPlainText(await fullBody())));
-
-  // Notes render as markdown. Inline secrets always come from the stored template's markers,
-  // filled from the decrypted body once fetched; a secure body is rendered as-is once shown.
+  // Notes render as markdown. Inline secrets come from the stored template's markers, filled
+  // from the decrypted body once fetched; a secure body is rendered as-is once shown.
   const source = item.secure ? (plaintext ?? "") : (item.body ?? "");
-  const chips: MarkdownChips = {
-    secrets: item.hasSecrets && plaintext !== null ? secretValues(plaintext) : null,
-    shown,
-    onToggleSecret: toggleSecret,
-    onCopySecret: copySecret,
-    onCopyText: (text) => void run(() => onCopy(text)),
-  };
   const bodyHidden = item.secure && !shown.has(WHOLE_BODY);
 
   return (
@@ -87,7 +52,7 @@ export function ItemBody({ item, session, run, onCopy, title }: Props) {
             variant="ghost"
             size="sm"
             icon={bodyHidden ? Eye : EyeOff}
-            onClick={() => toggleSecret(WHOLE_BODY)}
+            onClick={() => toggle(WHOLE_BODY)}
           >
             {bodyHidden ? "Unhide" : "Hide"}
           </Button>
@@ -98,7 +63,7 @@ export function ItemBody({ item, session, run, onCopy, title }: Props) {
       </div>
       {bodyHidden ? (
         <div className={styles.hidden}>
-          <button type="button" className={styles.mask} onClick={() => toggleSecret(WHOLE_BODY)}>
+          <button type="button" className={styles.mask} onClick={() => toggle(WHOLE_BODY)}>
             <LockKeyhole size={12} strokeWidth={2} />
             hidden
           </button>
