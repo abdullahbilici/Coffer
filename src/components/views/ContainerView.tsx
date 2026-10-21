@@ -1,4 +1,4 @@
-import { Box, FilePlus, Folder, FolderOpen, FolderPlus, Pencil } from "lucide-react";
+import { Box, FilePlus, FolderOpen, FolderPlus, Pencil } from "lucide-react";
 import type { Run, VaultActions } from "../../app/actions";
 import type { Session } from "../../hooks/useSession";
 import type { Tree } from "../../lib/api";
@@ -7,6 +7,7 @@ import { itemIcon } from "../itemIcon";
 import { Button } from "../ui/Button";
 import { Breadcrumb } from "./Breadcrumb";
 import { EntryList, type Entry } from "./EntryList";
+import { FolderGrid } from "./FolderGrid";
 import { ProjectOverview, useProjectOverview, type Overview } from "./ProjectOverview";
 import styles from "./ContainerView.module.css";
 import viewStyles from "./View.module.css";
@@ -24,7 +25,7 @@ type Props = {
 
 /**
  * A project or folder: breadcrumb, then for a project root its markdown overview, then its
- * subfolders and items (folders first).
+ * subfolders as tiles, then its notes as a list.
  */
 export function ContainerView(props: Props) {
   return props.folderId === null ? (
@@ -64,22 +65,13 @@ function Container({
       .join(", ");
   };
 
-  const entries: Entry[] = [
-    ...subfolders.map((sub) => ({
-      key: `folder:${sub.id}`,
-      icon: Folder,
-      title: sub.name,
-      subtitle: countIn(sub.id),
-      onOpen: () => actions.selectFolder(sub.id),
-    })),
-    ...items.map((item) => ({
-      key: `item:${item.id}`,
-      icon: itemIcon(item),
-      title: item.title,
-      tags: item.tags,
-      onOpen: () => actions.openItem(item),
-    })),
-  ];
+  const entries: Entry[] = items.map((item) => ({
+    key: `item:${item.id}`,
+    icon: itemIcon(item),
+    title: item.title,
+    tags: item.tags,
+    onOpen: () => actions.openItem(item),
+  }));
 
   return (
     <div className={viewStyles.view}>
@@ -133,7 +125,16 @@ function Container({
 
         {overview && <ProjectOverview overview={overview} />}
 
-        <EntryList entries={entries} emptyText="Empty" onSelectTag={actions.selectTag} />
+        {subfolders.length > 0 && (
+          <FolderGrid
+            folders={subfolders}
+            describe={(f) => countIn(f.id)}
+            onOpen={(f) => actions.selectFolder(f.id)}
+          />
+        )}
+        {(entries.length > 0 || subfolders.length === 0) && (
+          <EntryList entries={entries} emptyText="Empty" onSelectTag={actions.selectTag} />
+        )}
       </div>
     </div>
   );
