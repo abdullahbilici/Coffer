@@ -2,8 +2,7 @@
 
 .view {
   height: 100%;
-  overflow-y: auto;
-  scrollbar-gutter: stable;
+  overflow-y: scroll;
 }
 
 /* Window drag area above the content, aligned with the sidebar titlebar. */
