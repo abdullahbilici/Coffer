@@ -3,13 +3,14 @@ import {
   DndContext,
   DragOverlay,
   PointerSensor,
-  closestCenter,
+  pointerWithin,
   useDraggable,
   useDroppable,
   useSensor,
   useSensors,
   defaultDropAnimationSideEffects,
   type DragEndEvent,
+  type DragMoveEvent,
   type DropAnimation,
 } from "@dnd-kit/core";
 import { Box, Folder, PinOff, type LucideIcon } from "lucide-react";
@@ -24,6 +25,18 @@ import { IconButton } from "../ui/IconButton";
 import { Menu, type MenuAnchor } from "../ui/Menu";
 import { TreeRow } from "./TreeRow";
 import styles from "./Sidebar.module.css";
+
+type Drop = { key: string; side: "before" | "after" };
+
+/** The order after moving `dragged` to `drop`, or `null` if nothing would change. */
+function reorder(order: string[], dragged: string, drop: Drop): string[] | null {
+  if (dragged === drop.key || !order.includes(dragged)) return null;
+  const rest = order.filter((key) => key !== dragged);
+  const target = rest.indexOf(drop.key);
+  if (target === -1) return null;
+  rest.splice(drop.side === "before" ? target : target + 1, 0, dragged);
+  return rest.join() === order.join() ? null : rest;
+}
 
 /** Pointer travel before a press turns into a drag, so clicks still open the pin. */
 const DRAG_THRESHOLD_PX = 5;
@@ -47,7 +60,8 @@ type Props = {
 /** Pinned projects, folders and notes in the user's order; drag to reorder. */
 export function PinnedList({ tree, selection, actions }: Props) {
   const [dragging, setDragging] = useState<string | null>(null);
-  const [over, setOver] = useState<string | null>(null);
+  /** The row edge nearest the pointer: the dragged pin goes before or after that row. */
+  const [drop, setDrop] = useState<Drop | null>(null);
   const [menu, setMenu] = useState<{ anchor: MenuAnchor; pin: PinRef } | null>(null);
   // A dropped order shows immediately, so the drop animation lands on the new slot instead of
   // flying back while the backend catches up.
@@ -139,21 +153,27 @@ export function PinnedList({ tree, selection, actions }: Props) {
     if (order.includes(pinKey(entry.pin))) continue; // pinned again meanwhile
     rows.splice(Math.min(index, rows.length), 0, { entry, leaving: true });
   }
-  const from = dragging === null ? -1 : order.indexOf(dragging);
-  const to = over === null ? -1 : order.indexOf(over);
 
-  const onDragEnd = ({ active, over }: DragEndEvent) => {
-    setDragging(null);
-    setOver(null);
-    const a = order.indexOf(String(active.id));
-    const b = over ? order.indexOf(String(over.id)) : -1;
-    if (a === -1 || b === -1 || a === b) return;
-    const next = pins.map((p) => p.pin);
-    const [moved] = next.splice(a, 1);
-    next.splice(b, 0, moved);
-    setOptimistic(next.map(pinKey));
-    void actions.reorderPins(next).finally(() => setOptimistic(null));
+  const track = ({ over, delta, activatorEvent }: DragMoveEvent) => {
+    if (!over) return setDrop(null);
+    const pointerY = (activatorEvent as PointerEvent).clientY + delta.y;
+    const side = pointerY < over.rect.top + over.rect.height / 2 ? "before" : "after";
+    const key = String(over.id);
+    setDrop((d) => (d?.key === key && d.side === side ? d : { key, side }));
   };
+
+  const onDragEnd = ({ active }: DragEndEvent) => {
+    const next = dragging && drop ? reorder(order, String(active.id), drop) : null;
+    setDragging(null);
+    setDrop(null);
+    if (!next) return;
+    const byKey = new Map(pins.map((p) => [pinKey(p.pin), p.pin]));
+    setOptimistic(next);
+    void actions.reorderPins(next.map((key) => byKey.get(key)!)).finally(() => setOptimistic(null));
+  };
+
+  // Indicator only where dropping would actually change the order.
+  const preview = dragging && drop && reorder(order, dragging, drop) ? drop : null;
 
   if (rows.length === 0) return <p className={styles.empty}>No pins</p>;
 
@@ -195,13 +215,14 @@ export function PinnedList({ tree, selection, actions }: Props) {
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCenter}
+      collisionDetection={pointerWithin}
       onDragStart={({ active }) => setDragging(String(active.id))}
-      onDragOver={({ over }) => setOver(over ? String(over.id) : null)}
+      onDragMove={track}
+      onDragOver={track}
       onDragEnd={onDragEnd}
       onDragCancel={() => {
         setDragging(null);
-        setOver(null);
+        setDrop(null);
       }}
     >
       <div role="list">
@@ -212,13 +233,7 @@ export function PinnedList({ tree, selection, actions }: Props) {
             leaving={leaving}
             settled={seen.current.has(pinKey(entry.pin))}
             // The insertion line shows on the side the row will land.
-            insert={
-              pinKey(entry.pin) === over && from !== -1 && from !== to
-                ? from < to
-                  ? "after"
-                  : "before"
-                : null
-            }
+            insert={preview?.key === pinKey(entry.pin) ? preview.side : null}
             onMenu={(event) => {
               event.preventDefault();
               event.stopPropagation();
