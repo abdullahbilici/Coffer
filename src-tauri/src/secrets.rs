@@ -103,6 +103,27 @@ pub fn upgrade_legacy_markers(template: &str) -> String {
 mod tests {
     use super::*;
 
+    /// Shared with `src/lib/markup.test.ts`, so both parsers agree on every case.
+    #[derive(serde::Deserialize)]
+    struct Case {
+        name: String,
+        body: String,
+        template: String,
+        secrets: Vec<String>,
+    }
+
+    #[test]
+    fn matches_shared_fixtures() {
+        let cases: Vec<Case> =
+            serde_json::from_str(include_str!("../../fixtures/markup.json")).unwrap();
+        for case in cases {
+            let (template, secrets) = extract(&case.body);
+            assert_eq!(template, case.template, "{}", case.name);
+            assert_eq!(secrets, case.secrets, "{}", case.name);
+            assert_eq!(restore(&template, &secrets), case.body, "{}", case.name);
+        }
+    }
+
     #[test]
     fn round_trips_secrets() {
         let body = "user: `apo`\npass: `!hunter 2!`\ntoken: `!abc!`!";

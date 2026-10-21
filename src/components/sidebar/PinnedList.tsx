@@ -18,25 +18,13 @@ import type { VaultActions } from "../../app/actions";
 import type { PinRef, Tree } from "../../lib/api";
 import { cx } from "../../lib/cx";
 import { motion } from "../../lib/motion";
-import { pinKey } from "../../lib/pins";
+import { pinKey, reorder, type Drop } from "../../lib/pins";
 import type { Selection } from "../../lib/selection";
 import { itemIcon } from "../itemIcon";
 import { IconButton } from "../ui/IconButton";
 import { Menu, type MenuAnchor } from "../ui/Menu";
 import { TreeRow } from "./TreeRow";
 import styles from "./Sidebar.module.css";
-
-type Drop = { key: string; side: "before" | "after" };
-
-/** The order after moving `dragged` to `drop`, or `null` if nothing would change. */
-function reorder(order: string[], dragged: string, drop: Drop): string[] | null {
-  if (dragged === drop.key || !order.includes(dragged)) return null;
-  const rest = order.filter((key) => key !== dragged);
-  const target = rest.indexOf(drop.key);
-  if (target === -1) return null;
-  rest.splice(drop.side === "before" ? target : target + 1, 0, dragged);
-  return rest.join() === order.join() ? null : rest;
-}
 
 /** The dragged pin's tilt; matches `.pinGhost` in Sidebar.module.css. */
 const LIFTED = "rotate(-1deg) scale(1.02)";

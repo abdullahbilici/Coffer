@@ -11,6 +11,7 @@ export type Selection =
 export const nodeKey = {
   project: (id: number) => `project:${id}`,
   folder: (id: number) => `folder:${id}`,
+  item: (id: number) => `item:${id}`,
   tag: (path: string) => `tag:${path}`,
 };
 

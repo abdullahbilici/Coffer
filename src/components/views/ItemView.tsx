@@ -3,6 +3,7 @@ import { CopyPlus, KeyRound, Pencil, Pin, PinOff, Trash2 } from "lucide-react";
 import type { Run, VaultActions } from "../../app/actions";
 import type { Session } from "../../hooks/useSession";
 import { api, type Item, type SaveItemInput, type Tree } from "../../lib/api";
+import { pinnedSet } from "../../lib/pins";
 import { folderPath } from "../../lib/tree";
 import { Button } from "../ui/Button";
 import { Breadcrumb } from "./Breadcrumb";
@@ -39,7 +40,7 @@ export function ItemView({ itemId, tree, session, run, actions, onSave, onCopy }
 
   if (!item || !summary) return null;
   const project = tree.projects.find((p) => p.id === summary.projectId);
-  const pinned = tree.pins.some((p) => p.kind === "item" && p.id === item.id);
+  const pinned = pinnedSet(tree)("item", item.id);
 
   const startEdit = () =>
     run(async () => {

@@ -309,7 +309,7 @@ export function App() {
         }),
       deleteItem: (id) =>
         run(async () => {
-          await deleteWithExit(`item:${id}`, () => api.deleteItem(id));
+          await deleteWithExit(nodeKey.item(id), () => api.deleteItem(id));
           setSelection((s) => (s?.kind === "item" && s.id === id ? null : s));
         }),
     }),

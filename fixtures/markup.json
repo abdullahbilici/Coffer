@@ -1,0 +1,58 @@
+[
+  {
+    "name": "copyable and secret",
+    "body": "user: `apo`\npass: `!hunter 2!`",
+    "template": "user: `apo`\npass: `!0!`",
+    "secrets": ["hunter 2"],
+    "plain": "user: apo\npass: hunter 2"
+  },
+  {
+    "name": "several secrets keep their order",
+    "body": "`!a!` `b` `!c!`",
+    "template": "`!0!` `b` `!1!`",
+    "secrets": ["a", "c"],
+    "plain": "a b c"
+  },
+  {
+    "name": "spaces between backtick and bang mean copyable",
+    "body": "a ` !x! ` b ` ! y ! ` c",
+    "template": "a ` !x! ` b ` ! y ! ` c",
+    "secrets": [],
+    "plain": "a  !x!  b  ! y !  c"
+  },
+  {
+    "name": "empty bangs are copyable",
+    "body": "`!!` and `!`",
+    "template": "`!!` and `!`",
+    "secrets": [],
+    "plain": "!! and !"
+  },
+  {
+    "name": "bangs inside a secret",
+    "body": "`!a!b!`",
+    "template": "`!0!`",
+    "secrets": ["a!b"],
+    "plain": "a!b"
+  },
+  {
+    "name": "spans never cross a newline; the next backtick pair starts a new one",
+    "body": "`!a\nb!` and `x",
+    "template": "`!a\nb!` and `x",
+    "secrets": [],
+    "plain": "`!a\nb! and x"
+  },
+  {
+    "name": "empty span retries at the next backtick",
+    "body": "``!a!``",
+    "template": "``!0!``",
+    "secrets": ["a"],
+    "plain": "`a`"
+  },
+  {
+    "name": "a literal marker typed by the user is a secret too",
+    "body": "`!0!`",
+    "template": "`!0!`",
+    "secrets": ["0"],
+    "plain": "0"
+  }
+]

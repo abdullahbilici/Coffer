@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import type { VaultActions } from "../../app/actions";
 import type { ItemSummary, PinKind } from "../../lib/api";
+import { pinnedFirst } from "../../lib/pins";
 import { nodeKey, type Selection } from "../../lib/selection";
 import type { FolderNode, ProjectNode } from "../../lib/tree";
 import { itemIcon } from "../itemIcon";
@@ -47,11 +48,6 @@ type Props = {
 type OpenMenu = (event: MouseEvent, items: MenuItem[]) => void;
 
 type Context = Props & { openMenu: OpenMenu };
-
-/** Pinned entries float to the top; otherwise the (alphabetical) order is kept. */
-function pinnedFirst<T>(list: T[], pinned: (entry: T) => boolean): T[] {
-  return [...list].sort((a, b) => Number(pinned(b)) - Number(pinned(a)));
-}
 
 /** Pin / Unpin menu entry for a row. */
 function pinMenuItem(ctx: Context, kind: PinKind, id: number): MenuItem {
@@ -369,7 +365,7 @@ function ItemRow({ item, container, depth, ctx }: ItemRowProps) {
   const parent = { projectId: item.projectId, folderId: item.folderId };
   // Dropping onto an item lands in the item's folder, so the whole open folder is a target.
   const dnd = useTreeNode({
-    id: `item:${item.id}`,
+    id: nodeKey.item(item.id),
     subject: { kind: "item", id: item.id, label: item.title, icon: itemIcon(item), from: parent },
     drop: { target: parent, ...container },
   });
@@ -385,7 +381,7 @@ function ItemRow({ item, container, depth, ctx }: ItemRowProps) {
     },
   ];
   return (
-    <Collapse leaving={ctx.deleting.has(`item:${item.id}`)}>
+    <Collapse leaving={ctx.deleting.has(nodeKey.item(item.id))}>
       <TreeRow
         depth={depth}
         icon={itemIcon(item)}
