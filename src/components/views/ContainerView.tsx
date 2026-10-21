@@ -3,10 +3,13 @@ import type { Run, VaultActions } from "../../app/actions";
 import type { Session } from "../../hooks/useSession";
 import { useStoredState } from "../../hooks/useStoredState";
 import type { Tree } from "../../lib/api";
+import { pinnedSet } from "../../lib/pins";
+import { sortFolders, sortItems, type SortOrder } from "../../lib/sort";
 import { folderPath } from "../../lib/tree";
 import { itemIcon } from "../itemIcon";
 import { Button } from "../ui/Button";
 import { Segmented } from "../ui/Segmented";
+import { Select } from "../ui/Select";
 import { Breadcrumb, type Crumb } from "./Breadcrumb";
 import { EntryList, type Entry } from "./EntryList";
 import { FolderGrid } from "./FolderGrid";
@@ -15,6 +18,12 @@ import styles from "./ContainerView.module.css";
 import viewStyles from "./View.module.css";
 
 type ContentsView = "grid" | "list";
+
+const SORT_OPTIONS: { value: SortOrder; label: string }[] = [
+  { value: "name", label: "Name" },
+  { value: "updated", label: "Last updated" },
+  { value: "created", label: "Created" },
+];
 
 const VIEW_OPTIONS = [
   { value: "grid" as const, label: "Folder tiles", icon: LayoutGrid },
@@ -57,14 +66,22 @@ function Container({
   overview,
 }: Props & { overview: Overview | null }) {
   const [view, setView] = useStoredState<ContentsView>("coffer.contents.view", "grid");
+  const [sort, setSort] = useStoredState<SortOrder>("coffer.contents.sort", "name");
   const project = tree.projects.find((p) => p.id === projectId);
   const path = folderPath(tree.folders, folderId);
   const folder = path.at(-1) ?? null;
   if (!project || (folderId !== null && !folder)) return null;
 
-  const items = tree.items.filter((i) => i.projectId === projectId && i.folderId === folderId);
-  const subfolders = tree.folders.filter(
-    (f) => f.projectId === projectId && f.parentId === folderId,
+  const isPinned = pinnedSet(tree);
+  const items = sortItems(
+    tree.items.filter((i) => i.projectId === projectId && i.folderId === folderId),
+    sort,
+    (id) => isPinned("item", id),
+  );
+  const subfolders = sortFolders(
+    tree.folders.filter((f) => f.projectId === projectId && f.parentId === folderId),
+    sort,
+    (id) => isPinned("folder", id),
   );
 
   const countIn = (id: number) => {
@@ -96,6 +113,7 @@ function Container({
     title: sub.name,
     subtitle: countIn(sub.id),
     boxed: true,
+    pinned: isPinned("folder", sub.id),
     onOpen: () => actions.selectFolder(sub.id),
   }));
 
@@ -104,6 +122,7 @@ function Container({
     icon: itemIcon(item),
     title: item.title,
     tags: item.tags,
+    pinned: isPinned("item", item.id),
     onOpen: () => actions.openItem(item),
   }));
 
@@ -116,6 +135,7 @@ function Container({
             <Breadcrumb variant="path" crumbs={crumbs} />
           </h1>
           <div className={viewStyles.actions}>
+            <Select size="sm" label="Sort" value={sort} options={SORT_OPTIONS} onChange={setSort} />
             <Segmented value={view} options={VIEW_OPTIONS} onChange={setView} />
             {overview && overview.readme !== null && overview.draft === null && (
               <Button
@@ -156,6 +176,7 @@ function Container({
                 <FolderGrid
                   folders={subfolders}
                   describe={(f) => countIn(f.id)}
+                  isPinned={(f) => isPinned("folder", f.id)}
                   onOpen={(f) => actions.selectFolder(f.id)}
                 />
               )}

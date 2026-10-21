@@ -4,6 +4,7 @@ import type { VaultActions } from "../../app/actions";
 import type { Session } from "../../hooks/useSession";
 import type { Tree } from "../../lib/api";
 import type { Selection, TreeSection } from "../../lib/selection";
+import { pinnedSet } from "../../lib/pins";
 import { buildTagTree } from "../../lib/tags";
 import { buildProjectTree } from "../../lib/tree";
 import { IconButton } from "../ui/IconButton";
@@ -11,6 +12,7 @@ import { Kbd } from "../ui/Kbd";
 import { ProjectTree, type TreeEdit } from "./ProjectTree";
 import { SessionBar } from "./SessionBar";
 import { TagTree } from "./TagTree";
+import { PinnedList } from "./PinnedList";
 import { SplitPanes } from "./SplitPanes";
 import { TreeDndProvider } from "./TreeDnd";
 import styles from "./Sidebar.module.css";
@@ -38,6 +40,7 @@ export function Sidebar(props: Props) {
 
   const projectNodes = useMemo(() => buildProjectTree(tree), [tree]);
   const tagNodes = useMemo(() => buildTagTree(tree.items), [tree.items]);
+  const isPinned = useMemo(() => pinnedSet(tree), [tree]);
 
   // Cmd+K or Cmd+F focuses search.
   useEffect(() => {
@@ -75,63 +78,74 @@ export function Sidebar(props: Props) {
       </div>
 
       <SplitPanes
-        top={{
-          id: "projects",
-          title: "Projects",
-          actions: (
-            <>
-              <CollapseAll section="projects" {...props} />
-              <IconButton
-                icon={Plus}
-                label="New project"
-                size="sm"
-                onClick={() => actions.guard(() => onEdit({ type: "createProject" }))}
-              />
-            </>
-          ),
-          children: (
-            <TreeDndProvider
-              tree={tree}
-              expanded={expanded}
-              onExpand={onExpand}
-              authorize={props.session.ensureUnlocked}
-              onMove={(subject, { projectId, folderId }) =>
-                subject.kind === "item"
-                  ? actions.moveItem(subject.id, projectId, folderId)
-                  : actions.moveFolder(subject.id, projectId, folderId)
-              }
-            >
-              <ProjectTree
-                nodes={projectNodes}
-                expanded={expanded}
-                selection={selection}
-                edit={edit}
-                onEdit={onEdit}
-                onToggle={onToggle}
-                onExpand={onExpand}
-                actions={actions}
-              />
-            </TreeDndProvider>
-          ),
-        }}
-        bottom={{
-          id: "tags",
-          title: "Tags",
-          actions: <CollapseAll section="tags" {...props} />,
-          children:
-            tagNodes.length > 0 ? (
-              <TagTree
-                nodes={tagNodes}
-                expanded={expanded}
-                selection={selection}
-                onToggle={onToggle}
-                onExpand={onExpand}
-                onSelect={actions.selectTag}
-              />
-            ) : (
-              <p className={styles.empty}>No tags</p>
+        panes={[
+          {
+            id: "pinned",
+            title: "Pinned",
+            defaultWeight: 0.22,
+            children: <PinnedList tree={tree} selection={selection} actions={actions} />,
+          },
+          {
+            id: "projects",
+            title: "Projects",
+            defaultWeight: 0.53,
+            actions: (
+              <>
+                <CollapseAll section="projects" {...props} />
+                <IconButton
+                  icon={Plus}
+                  label="New project"
+                  size="sm"
+                  onClick={() => actions.guard(() => onEdit({ type: "createProject" }))}
+                />
+              </>
             ),
-        }}
+            children: (
+              <TreeDndProvider
+                tree={tree}
+                expanded={expanded}
+                onExpand={onExpand}
+                authorize={props.session.ensureUnlocked}
+                onMove={(subject, { projectId, folderId }) =>
+                  subject.kind === "item"
+                    ? actions.moveItem(subject.id, projectId, folderId)
+                    : actions.moveFolder(subject.id, projectId, folderId)
+                }
+              >
+                <ProjectTree
+                  nodes={projectNodes}
+                  expanded={expanded}
+                  selection={selection}
+                  edit={edit}
+                  onEdit={onEdit}
+                  onToggle={onToggle}
+                  onExpand={onExpand}
+                  isPinned={isPinned}
+                  actions={actions}
+                />
+              </TreeDndProvider>
+            ),
+          },
+          {
+            id: "tags",
+            title: "Tags",
+            defaultWeight: 0.25,
+            actions: <CollapseAll section="tags" {...props} />,
+            children:
+              tagNodes.length > 0 ? (
+                <TagTree
+                  nodes={tagNodes}
+                  expanded={expanded}
+                  selection={selection}
+                  onToggle={onToggle}
+                  onExpand={onExpand}
+                  onSelect={actions.selectTag}
+                />
+              ) : (
+                <p className={styles.empty}>No tags</p>
+              ),
+          },
+        ]}
       />
 
       <SessionBar session={props.session} onLock={props.onLock} />

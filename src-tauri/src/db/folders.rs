@@ -12,11 +12,12 @@ pub struct Folder {
     /// `None` for folders at the project root.
     pub parent_id: Option<i64>,
     pub name: String,
+    pub created_at: i64,
 }
 
 pub fn list(conn: &Connection) -> AppResult<Vec<Folder>> {
     let mut stmt = conn.prepare(
-        "SELECT id, project_id, parent_id, name FROM folders ORDER BY name COLLATE NOCASE",
+        "SELECT id, project_id, parent_id, name, created_at FROM folders ORDER BY name COLLATE NOCASE",
     )?;
     let rows = stmt.query_map([], |row| {
         Ok(Folder {
@@ -24,6 +25,7 @@ pub fn list(conn: &Connection) -> AppResult<Vec<Folder>> {
             project_id: row.get(1)?,
             parent_id: row.get(2)?,
             name: row.get(3)?,
+            created_at: row.get(4)?,
         })
     })?;
     Ok(rows.collect::<Result<_, _>>()?)

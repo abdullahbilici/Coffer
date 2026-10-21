@@ -1,4 +1,4 @@
-import type { LucideIcon } from "lucide-react";
+import { Pin, type LucideIcon } from "lucide-react";
 import { cx } from "../../lib/cx";
 import { TagList } from "./TagList";
 import styles from "./EntryList.module.css";
@@ -11,6 +11,7 @@ export type Entry = {
   tags?: string[];
   /** Draws the icon on a tinted tile; used for folders so they stand apart from notes. */
   boxed?: boolean;
+  pinned?: boolean;
   onOpen: () => void;
 };
 
@@ -25,14 +26,19 @@ export function EntryList({ entries, emptyText, onSelectTag }: Props) {
   if (entries.length === 0) return <p className={styles.empty}>{emptyText}</p>;
   return (
     <ul className={styles.list}>
-      {entries.map(({ key, icon: Icon, title, subtitle, tags, boxed, onOpen }) => (
+      {entries.map(({ key, icon: Icon, title, subtitle, tags, boxed, pinned, onOpen }) => (
         <li key={key} className={styles.row} onClick={onOpen}>
           {/* Every icon gets the same slot, so boxed and plain rows keep their titles aligned. */}
           <span className={cx(styles.iconSlot, boxed && styles.boxed)}>
             <Icon size={16} strokeWidth={1.75} />
           </span>
           <div className={styles.text}>
-            <span className={styles.title}>{title}</span>
+            <span className={styles.title}>
+              {title}
+              {pinned && (
+                <Pin size={12} strokeWidth={2} className={styles.pin} aria-label="Pinned" />
+              )}
+            </span>
             {subtitle && <span className={styles.location}>{subtitle}</span>}
           </div>
           {tags && tags.length > 0 && (

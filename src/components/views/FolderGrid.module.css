@@ -61,3 +61,9 @@
   color: var(--color-text-tertiary);
   font-size: var(--text-sm);
 }
+
+.pin {
+  margin-left: 6px;
+  color: var(--color-text-tertiary);
+  vertical-align: -1px;
+}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CopyPlus, KeyRound, Pencil, Trash2 } from "lucide-react";
+import { CopyPlus, KeyRound, Pencil, Pin, PinOff, Trash2 } from "lucide-react";
 import type { Run, VaultActions } from "../../app/actions";
 import type { Session } from "../../hooks/useSession";
 import { api, type Item, type SaveItemInput, type Tree } from "../../lib/api";
@@ -39,6 +39,7 @@ export function ItemView({ itemId, tree, session, run, actions, onSave, onCopy }
 
   if (!item || !summary) return null;
   const project = tree.projects.find((p) => p.id === summary.projectId);
+  const pinned = tree.pins.some((p) => p.kind === "item" && p.id === item.id);
 
   const startEdit = () =>
     run(async () => {
@@ -100,6 +101,14 @@ export function ItemView({ itemId, tree, session, run, actions, onSave, onCopy }
           <div className={viewStyles.actions}>
             <Button variant="ghost" size="sm" icon={Pencil} onClick={startEdit}>
               Edit
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={pinned ? PinOff : Pin}
+              onClick={() => actions.setPinned({ kind: "item", id: item.id }, !pinned)}
+            >
+              {pinned ? "Unpin" : "Pin"}
             </Button>
             <Button
               variant="ghost"

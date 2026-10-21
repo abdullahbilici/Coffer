@@ -267,6 +267,16 @@ export function App() {
           setSelection(null);
         }),
 
+      setPinned: (pin, pinned) =>
+        run(async () => {
+          await session.withUnlock(() => api.setPinned(pin, pinned));
+          await reload();
+        }),
+      reorderPins: (order) =>
+        run(async () => {
+          await session.withUnlock(() => api.reorderPins(order));
+          await reload();
+        }),
       duplicateItem: (id) =>
         run(async () => {
           const copy = await session.withUnlock(() => api.duplicateItem(id));

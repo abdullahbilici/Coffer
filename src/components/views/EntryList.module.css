@@ -70,3 +70,9 @@
 .empty {
   color: var(--color-text-tertiary);
 }
+
+.pin {
+  margin-left: 6px;
+  color: var(--color-text-tertiary);
+  vertical-align: -1px;
+}

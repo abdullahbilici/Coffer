@@ -20,6 +20,7 @@ pub struct ItemSummary {
     pub has_secrets: bool,
     pub tags: Vec<String>,
     pub updated_at: i64,
+    pub created_at: i64,
 }
 
 #[derive(Serialize)]
@@ -57,8 +58,7 @@ pub struct ItemRecord<'a> {
     pub tags: &'a [String],
 }
 
-const SUMMARY_COLUMNS: &str =
-    "id, project_id, folder_id, title, secure, updated_at, secure = 0 AND ciphertext IS NOT NULL";
+const SUMMARY_COLUMNS: &str = "id, project_id, folder_id, title, secure, updated_at, secure = 0 AND ciphertext IS NOT NULL, created_at";
 
 fn to_summary(row: &rusqlite::Row) -> rusqlite::Result<ItemSummary> {
     Ok(ItemSummary {
@@ -70,6 +70,7 @@ fn to_summary(row: &rusqlite::Row) -> rusqlite::Result<ItemSummary> {
         has_secrets: row.get(6)?,
         tags: Vec::new(),
         updated_at: row.get(5)?,
+        created_at: row.get(7)?,
     })
 }
 
@@ -91,7 +92,7 @@ pub fn get(conn: &Connection, id: i64) -> AppResult<Item> {
     let (mut summary, body) = conn.query_row(
         &format!("SELECT {SUMMARY_COLUMNS}, body FROM items WHERE id = ?1"),
         [id],
-        |row| Ok((to_summary(row)?, row.get::<_, Option<String>>(7)?)),
+        |row| Ok((to_summary(row)?, row.get::<_, Option<String>>(8)?)),
     )?;
     summary.tags = tags_of(conn, id)?;
     let body = if summary.secure { None } else { body };

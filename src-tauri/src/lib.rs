@@ -13,7 +13,7 @@ mod time;
 
 use tauri::Manager;
 
-use commands::{folders, items, projects, session as session_cmd, vault};
+use commands::{folders, items, pins, projects, session as session_cmd, vault};
 use state::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -49,6 +49,8 @@ pub fn run() {
             items::move_item,
             items::duplicate_item,
             items::delete_item,
+            pins::set_pinned,
+            pins::reorder_pins,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

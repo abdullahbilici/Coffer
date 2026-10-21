@@ -1,5 +1,6 @@
 pub mod folders;
 pub mod items;
+pub mod pins;
 pub mod projects;
 
 use std::path::Path;
@@ -71,6 +72,14 @@ const MIGRATIONS: &[Migration] = &[
     ),
     // Secret markers moved from `{{n}}` to `` `!n!` ``.
     Migration::Code(upgrade_secret_markers),
+    // Pins: one shared order across projects, folders and items (NULL = not pinned).
+    Migration::Sql(
+        r#"
+    ALTER TABLE projects ADD COLUMN pin_order INTEGER;
+    ALTER TABLE folders ADD COLUMN pin_order INTEGER;
+    ALTER TABLE items ADD COLUMN pin_order INTEGER;
+"#,
+    ),
 ];
 
 fn upgrade_secret_markers(conn: &Connection) -> AppResult<()> {
@@ -101,8 +110,18 @@ pub fn open(path: &Path) -> AppResult<Connection> {
 }
 
 fn migrate(conn: &Connection) -> AppResult<()> {
+    migrate_to(conn, MIGRATIONS.len())
+}
+
+/// Applies pending migrations up to (not including) index `target`.
+fn migrate_to(conn: &Connection, target: usize) -> AppResult<()> {
     let applied: i64 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    for (index, migration) in MIGRATIONS.iter().enumerate().skip(applied as usize) {
+    let pending = MIGRATIONS
+        .iter()
+        .enumerate()
+        .take(target)
+        .skip(applied as usize);
+    for (index, migration) in pending {
         let tx = conn.unchecked_transaction()?;
         match migration {
             Migration::Sql(sql) => tx.execute_batch(sql)?,
@@ -143,14 +162,14 @@ mod tests {
 
     #[test]
     fn migration_3_upgrades_legacy_secret_markers() {
-        let conn = open_in_memory();
+        let conn = Connection::open_in_memory().unwrap();
+        migrate_to(&conn, 2).unwrap();
         conn.execute_batch(
             "INSERT INTO projects (id, name, readme, readme_ciphertext, created_at, updated_at)
              VALUES (1, 'Acme', 'vpn: {{0}}', x'00', 0, 0);
              INSERT INTO items (project_id, title, secure, body, ciphertext, created_at, updated_at)
              VALUES (1, 'Login', 0, 'pass: {{0}} {{1}}', x'00', 0, 0),
-                    (1, 'Plain', 0, 'literal {{0}}', NULL, 0, 0);
-             PRAGMA user_version = 2;",
+                    (1, 'Plain', 0, 'literal {{0}}', NULL, 0, 0);",
         )
         .unwrap();
 

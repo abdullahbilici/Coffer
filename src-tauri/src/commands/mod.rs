@@ -2,6 +2,7 @@
 
 pub mod folders;
 pub mod items;
+pub mod pins;
 pub mod projects;
 mod sealing;
 pub mod session;

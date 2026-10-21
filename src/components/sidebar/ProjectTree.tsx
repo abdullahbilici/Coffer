@@ -2,6 +2,8 @@ import { useState, type MouseEvent } from "react";
 import {
   Box,
   CopyPlus,
+  Pin,
+  PinOff,
   Ellipsis,
   FilePlus,
   Folder,
@@ -11,7 +13,7 @@ import {
   Trash2,
 } from "lucide-react";
 import type { VaultActions } from "../../app/actions";
-import type { ItemSummary } from "../../lib/api";
+import type { ItemSummary, PinKind } from "../../lib/api";
 import { nodeKey, type Selection } from "../../lib/selection";
 import type { FolderNode, ProjectNode } from "../../lib/tree";
 import { itemIcon } from "../itemIcon";
@@ -36,12 +38,32 @@ type Props = {
   onEdit: (edit: TreeEdit | null) => void;
   onToggle: (key: string) => void;
   onExpand: (keys: string[]) => void;
+  isPinned: (kind: PinKind, id: number) => boolean;
   actions: VaultActions;
 };
 
 type OpenMenu = (event: MouseEvent, items: MenuItem[]) => void;
 
 type Context = Props & { openMenu: OpenMenu };
+
+/** Pinned entries float to the top; otherwise the (alphabetical) order is kept. */
+function pinnedFirst<T>(list: T[], pinned: (entry: T) => boolean): T[] {
+  return [...list].sort((a, b) => Number(pinned(b)) - Number(pinned(a)));
+}
+
+/** Pin / Unpin menu entry for a row. */
+function pinMenuItem(ctx: Context, kind: PinKind, id: number): MenuItem {
+  const pinned = ctx.isPinned(kind, id);
+  return {
+    label: pinned ? "Unpin" : "Pin",
+    icon: pinned ? PinOff : Pin,
+    onSelect: () => ctx.actions.setPinned({ kind, id }, !pinned),
+  };
+}
+
+/** Small pin shown at the right of pinned rows (hover actions replace it). */
+const pinBadge = (pinned: boolean) =>
+  pinned ? <Pin size={12} strokeWidth={2} aria-label="Pinned" /> : undefined;
 
 /** First click selects and opens a node; clicking the selected node again toggles it. */
 function clickNode(ctx: Context, key: string, selected: boolean, select: () => void) {
@@ -87,7 +109,7 @@ export function ProjectTree(props: Props) {
           onCancel={() => onEdit(null)}
         />
       )}
-      {nodes.map((node) => (
+      {pinnedFirst(nodes, (n) => props.isPinned("project", n.project.id)).map((node) => (
         <ProjectBranch key={node.project.id} node={node} ctx={ctx} />
       ))}
       {nodes.length === 0 && edit?.type !== "createProject" && (
@@ -117,6 +139,7 @@ function ProjectBranch({ node, ctx }: { node: ProjectNode; ctx: Context }) {
     actions.newItem(project.id, null);
   };
   const menuItems: MenuItem[] = [
+    pinMenuItem(ctx, "project", project.id),
     { label: "New item", icon: FilePlus, onSelect: newItem },
     { label: "New folder", icon: FolderPlus, onSelect: newFolder },
     {
@@ -152,6 +175,7 @@ function ProjectBranch({ node, ctx }: { node: ProjectNode; ctx: Context }) {
           depth={0}
           icon={Box}
           label={project.name}
+          trailing={pinBadge(ctx.isPinned("project", project.id))}
           expanded={isOpen}
           selected={selected}
           dnd={dnd}
@@ -222,10 +246,10 @@ function Children({ folders, items, projectId, parentId, container, depth, ctx }
           onCancel={() => onEdit(null)}
         />
       )}
-      {folders.map((node) => (
+      {pinnedFirst(folders, (n) => ctx.isPinned("folder", n.folder.id)).map((node) => (
         <FolderBranch key={node.folder.id} node={node} depth={depth} ctx={ctx} />
       ))}
-      {items.map((item) => (
+      {pinnedFirst(items, (i) => ctx.isPinned("item", i.id)).map((item) => (
         <ItemRow key={item.id} item={item} container={container} depth={depth} ctx={ctx} />
       ))}
       {empty && (
@@ -263,6 +287,7 @@ function FolderBranch({ node, depth, ctx }: { node: FolderNode; depth: number; c
     actions.newItem(folder.projectId, folder.id);
   };
   const menuItems: MenuItem[] = [
+    pinMenuItem(ctx, "folder", folder.id),
     { label: "New item", icon: FilePlus, onSelect: newItem },
     { label: "New folder", icon: FolderPlus, onSelect: newFolder },
     {
@@ -298,6 +323,7 @@ function FolderBranch({ node, depth, ctx }: { node: FolderNode; depth: number; c
           depth={depth}
           icon={isOpen ? FolderOpen : Folder}
           label={folder.name}
+          trailing={pinBadge(ctx.isPinned("folder", folder.id))}
           expanded={isOpen}
           selected={selected}
           dnd={dnd}
@@ -346,6 +372,7 @@ function ItemRow({ item, container, depth, ctx }: ItemRowProps) {
     drop: { target: parent, ...container },
   });
   const menuItems: MenuItem[] = [
+    pinMenuItem(ctx, "item", item.id),
     { label: "Duplicate", icon: CopyPlus, onSelect: () => actions.duplicateItem(item.id) },
     {
       label: "Delete item",
@@ -360,6 +387,7 @@ function ItemRow({ item, container, depth, ctx }: ItemRowProps) {
       depth={depth}
       icon={itemIcon(item)}
       label={item.title}
+      trailing={pinBadge(ctx.isPinned("item", item.id))}
       dnd={dnd}
       selected={selection?.kind === "item" && selection.id === item.id}
       onClick={() => actions.openItem(item)}

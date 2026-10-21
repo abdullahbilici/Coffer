@@ -27,3 +27,17 @@
   color: var(--color-text-tertiary);
   pointer-events: none;
 }
+
+.sm {
+  min-width: 0;
+}
+
+.sm .select {
+  height: 26px;
+  padding: 0 var(--space-6) 0 var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.sm .chevron {
+  right: var(--space-2);
+}

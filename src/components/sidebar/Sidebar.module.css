@@ -92,3 +92,28 @@
   color: var(--color-text-tertiary);
   font-variant-numeric: tabular-nums;
 }
+
+/* Pinned rows show an accent insertion line where a dragged pin will land. */
+.pinRow {
+  position: relative;
+}
+
+.before::before,
+.after::after {
+  content: "";
+  position: absolute;
+  right: var(--space-3);
+  left: var(--space-3);
+  z-index: 1;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--color-accent);
+}
+
+.before::before {
+  top: -1px;
+}
+
+.after::after {
+  bottom: -1px;
+}

@@ -1,4 +1,4 @@
-import type { ItemSummary } from "../lib/api";
+import type { ItemSummary, PinRef } from "../lib/api";
 
 /** Runs an async action and reports failures as a toast. */
 export type Run = (action: () => Promise<unknown>) => Promise<void>;
@@ -25,6 +25,8 @@ export type VaultActions = {
   moveFolder: (id: number, projectId: number, parentId: number | null) => void;
 
   duplicateItem: (id: number) => void;
+  setPinned: (pin: PinRef, pinned: boolean) => void;
+  reorderPins: (order: PinRef[]) => void;
   deleteItem: (id: number) => void;
   moveItem: (id: number, projectId: number, folderId: number | null) => void;
 };

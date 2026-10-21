@@ -26,7 +26,12 @@ export type Folder = {
   projectId: number;
   parentId: number | null;
   name: string;
+  createdAt: number;
 };
+
+export type PinKind = "project" | "folder" | "item";
+
+export type PinRef = { kind: PinKind; id: number };
 
 export type ItemSummary = {
   id: number;
@@ -39,6 +44,7 @@ export type ItemSummary = {
   hasSecrets: boolean;
   tags: string[];
   updatedAt: number;
+  createdAt: number;
 };
 
 /** `body` is `null` for secure items and a `` `!0!` ``-marker template for items with inline secrets. */
@@ -48,6 +54,8 @@ export type Tree = {
   projects: ProjectSummary[];
   folders: Folder[];
   items: ItemSummary[];
+  /** Pinned projects, folders and items in the user's order. */
+  pins: PinRef[];
 };
 
 export type SaveItemInput = {
@@ -103,4 +111,7 @@ export const api = {
   moveItem: (id: number, projectId: number, folderId: number | null) =>
     invoke<void>("move_item", { id, projectId, folderId }),
   deleteItem: (id: number) => invoke<void>("delete_item", { id }),
+
+  setPinned: (pin: PinRef, pinned: boolean) => invoke<void>("set_pinned", { pin, pinned }),
+  reorderPins: (order: PinRef[]) => invoke<void>("reorder_pins", { order }),
 };
