@@ -1,7 +1,19 @@
 .prose {
-  font-size: var(--text-lg);
   line-height: 1.7;
   user-select: text;
+}
+
+.lg {
+  font-size: var(--text-lg);
+}
+
+.md {
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.prose > :last-child {
+  margin-bottom: 0;
 }
 
 .prose > :first-child {

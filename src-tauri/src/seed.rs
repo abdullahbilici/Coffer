@@ -131,6 +131,12 @@ const PROJECTS: &[SeedProject] = &[
                 "Repo:     `github.com/acme-demo/storefront`\nWorkflow: `.github/workflows/deploy.yml`\nDeploy token: `!ghp_DEMOxxxxxxxxxxxxxxxxxxxxxxxx!`\nEnvironments need a reviewer from the Acme side.",
             ),
             note(
+                Some("Infrastructure"),
+                "Deploy runbook",
+                &["runbook", "env/prod"],
+                "# Deploy runbook\n\nProduction deploys run from GitHub Actions. Do this by hand **only** if CI is down.\n\n## Steps\n\n1. Announce in `#acme-deploys`\n2. Tag the release: `git tag v$(date +%Y.%m.%d) && git push --tags`\n3. Run the workflow manually\n4. Watch the error rate in Sentry for 10 minutes\n\n## Rollback\n\n```sh\naws ecs update-service --cluster acme-prod --service storefront --task-definition storefront:PREVIOUS\n```\n\nBreak-glass AWS password: `!breakglass-demo-7731!`\n\n> If the database migration already ran, ask Elif before rolling back.\n\n## Checklist\n\n- [x] CI green on `main`\n- [x] Staging smoke test\n- [ ] Changelog posted",
+            ),
+            note(
                 Some("Payments"),
                 "Stripe test keys",
                 &["billing/stripe", "env/staging"],
@@ -202,6 +208,12 @@ const PROJECTS: &[SeedProject] = &[
                 "DNS setup",
                 &["infra/dns"],
                 "Cloudflare free plan.\n\nA      @    `203.0.113.42`\nCNAME  www  `muhit-demo.com`\nAPI token: `!cf-demo-token-8812!`",
+            ),
+            note(
+                Some("Servers"),
+                "Incident checklist",
+                &["runbook", "env/prod"],
+                "# Incident checklist\n\n- [ ] Check `https://status.muhit-demo.com`\n- [ ] SSH in: `ssh deploy@203.0.113.42`\n- [ ] Tail logs: `journalctl -u muhit -f`\n- [ ] Restart if stuck: `sudo systemctl restart muhit`\n- [ ] Post an update in the app banner\n\n## Who to call\n\n| Area | Person | Phone |\n| --- | --- | --- |\n| Server | Apo | `+90 555 010 0000` |\n| App | Deniz | `+90 555 010 0001` |\n\nHetzner console rescue password: `!rescue-demo-1122!`",
             ),
             secure(
                 Some("Servers"),
@@ -279,6 +291,12 @@ const PROJECTS: &[SeedProject] = &[
                 "Client contacts",
                 &["contacts"],
                 "Ops lead: Sarah Lin, `sarah.lin@northwind-demo.com`\nIT:       Tom Becker, `it@northwind-demo.com`\nOn-call:  `+49 30 5550 1234`",
+            ),
+            note(
+                None,
+                "Meeting notes 2026-10",
+                &["meetings"],
+                "## Kickoff, Oct 14\n\n*Attendees:* Sarah, Tom, Apo\n\n- Map tiles move from Mapbox to self-hosted by **Q1**\n- SMS alerts stay on Twilio for now\n- Tom sends the VPN profile this week\n\n### Action items\n\n- [ ] Apo: cost estimate for tile hosting\n- [x] Sarah: share fleet CSV export\n- [ ] Tom: VPN profile for staging",
             ),
         ],
     },
@@ -393,6 +411,12 @@ const PROJECTS: &[SeedProject] = &[
                 "Subscriptions",
                 &["billing"],
                 "Figma Pro:       yearly, 2027-01-12, $144\nApple Developer: yearly, 2027-06-02, $99\nGitHub Pro:      monthly, $4\nSupport email:   `billing@apo-demo.dev`",
+            ),
+            note(
+                None,
+                "Markdown cheatsheet",
+                &["reference"],
+                "# Markdown in notes\n\nEvery note is markdown. Each new line stays a new line, and spaces are kept.\n\n## Text\n\n**Bold**, *italic*, ~~struck~~ and [links](https://example.com).\n\n## Values\n\n- Copyable: `api.example.com`\n- Secret: `!hunter2-demo!`\n- Not a secret (spaces): ` !just text! `\n\n## Lists\n\n1. First\n2. Second\n   - Nested\n\n- [x] Done\n- [ ] To do\n\n## Table\n\n| Key | Value |\n| --- | --- |\n| Region | `eu-central-1` |\n| Password | `!table-secret-demo!` |\n\n## Code\n\n```sh\ncurl -H \"Authorization: Bearer $TOKEN\" https://api.example.com/me\n```\n\n> Quotes work too.",
             ),
             secure(
                 Some("Finance"),

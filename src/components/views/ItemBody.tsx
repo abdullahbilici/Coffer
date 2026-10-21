@@ -1,17 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Copy, Eye, EyeOff, LockKeyhole } from "lucide-react";
 import type { Run } from "../../app/actions";
 import type { Session } from "../../hooks/useSession";
 import { api, type Item } from "../../lib/api";
-import {
-  parseBody,
-  parseCopyable,
-  parseTemplate,
-  secretValues,
-  toPlainText,
-} from "../../lib/markup";
+import { secretValues, toPlainText } from "../../lib/markup";
 import { Button } from "../ui/Button";
-import { InlineBody } from "./InlineBody";
+import { Markdown, type MarkdownChips } from "./Markdown";
 import styles from "./ItemBody.module.css";
 
 type Props = {
@@ -21,6 +15,8 @@ type Props = {
   run: Run;
   /** Writes to the clipboard and confirms with a toast. */
   onCopy: (text: string) => Promise<void>;
+  /** Shown at the left of the toolbar on the note page; previews omit it. */
+  title?: ReactNode;
 };
 
 /** Secret index used for the whole body of a secure item. */
@@ -30,7 +26,7 @@ const WHOLE_BODY = 0;
  * An item's body with Copy all, chips and secrets. Used by the item page and search previews.
  * Secrets open masked; decrypted text lives only as long as this component.
  */
-export function ItemBody({ item, session, run, onCopy }: Props) {
+export function ItemBody({ item, session, run, onCopy, title }: Props) {
   const [plaintext, setPlaintext] = useState<string | null>(null);
   const [shown, setShown] = useState<ReadonlySet<number>>(() => new Set());
 
@@ -69,16 +65,23 @@ export function ItemBody({ item, session, run, onCopy }: Props) {
 
   const copyAll = () => run(async () => onCopy(toPlainText(await fullBody())));
 
-  const segments = item.secure
-    ? parseCopyable(plaintext ?? "")
-    : item.hasSecrets && plaintext !== null
-      ? parseBody(plaintext)
-      : parseTemplate(item.body ?? "");
+  // Notes render as markdown. Inline secrets always come from the stored template's markers,
+  // filled from the decrypted body once fetched; a secure body is rendered as-is once shown.
+  const source = item.secure ? (plaintext ?? "") : (item.body ?? "");
+  const chips: MarkdownChips = {
+    secrets: item.hasSecrets && plaintext !== null ? secretValues(plaintext) : null,
+    shown,
+    onToggleSecret: toggleSecret,
+    onCopySecret: copySecret,
+    onCopyText: (text) => void run(() => onCopy(text)),
+  };
   const bodyHidden = item.secure && !shown.has(WHOLE_BODY);
 
   return (
     <div className={styles.body}>
       <div className={styles.bodyToolbar}>
+        {title && <h1 className={styles.title}>{title}</h1>}
+        <span className={styles.spacer} />
         {item.secure && (
           <Button
             variant="ghost"
@@ -101,13 +104,9 @@ export function ItemBody({ item, session, run, onCopy }: Props) {
           </button>
         </div>
       ) : (
-        <InlineBody
-          segments={segments}
-          shown={shown}
-          onToggleSecret={toggleSecret}
-          onCopySecret={copySecret}
-          onCopyText={(text) => void run(() => onCopy(text))}
-        />
+        <div className={styles.content}>
+          <Markdown source={source} chips={chips} size="md" />
+        </div>
       )}
     </div>
   );

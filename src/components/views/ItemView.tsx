@@ -96,12 +96,6 @@ export function ItemView({ itemId, tree, session, run, actions, onSave, onCopy }
                 ]}
               />
             )}
-            <h1 className={viewStyles.title}>
-              {item.secure && (
-                <KeyRound size={20} strokeWidth={1.75} className={viewStyles.titleIcon} />
-              )}
-              {item.title}
-            </h1>
           </div>
           <div className={viewStyles.actions}>
             <Button variant="ghost" size="sm" icon={Pencil} onClick={startEdit}>
@@ -131,7 +125,21 @@ export function ItemView({ itemId, tree, session, run, actions, onSave, onCopy }
 
         {item.tags.length > 0 && <TagList tags={item.tags} onSelect={actions.selectTag} />}
 
-        <ItemBody key={item.updatedAt} item={item} session={session} run={run} onCopy={onCopy} />
+        <ItemBody
+          key={item.updatedAt}
+          item={item}
+          session={session}
+          run={run}
+          onCopy={onCopy}
+          title={
+            <>
+              {item.secure && (
+                <KeyRound size={14} strokeWidth={1.75} className={viewStyles.titleIcon} />
+              )}
+              {item.title}
+            </>
+          }
+        />
 
         <p className={viewStyles.meta}>Updated {dateFormat.format(item.updatedAt)}</p>
       </div>

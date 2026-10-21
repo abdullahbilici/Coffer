@@ -5,6 +5,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { COPY_TAG, SECRET_TAG, remarkMarkup } from "../../lib/remarkMarkup";
 import { CopyChip } from "./CopyChip";
 import { SecretChip } from "./SecretChip";
+import { cx } from "../../lib/cx";
 import styles from "./Markdown.module.css";
 
 export type MarkdownChips = {
@@ -65,10 +66,17 @@ const components = { a: Link, [COPY_TAG]: Copyable, [SECRET_TAG]: Secret } as Co
 const remarkPlugins = [remarkGfm, remarkMarkup];
 
 /** Renders GitHub-flavoured markdown with Coffer chips. Raw HTML is not rendered. */
-export function Markdown({ source, chips }: { source: string; chips: MarkdownChips }) {
+type Props = {
+  source: string;
+  chips: MarkdownChips;
+  /** `md` for note bodies, `lg` for project overviews. */
+  size?: "md" | "lg";
+};
+
+export function Markdown({ source, chips, size = "lg" }: Props) {
   return (
     <ChipsContext.Provider value={chips}>
-      <div className={styles.prose}>
+      <div className={cx(styles.prose, styles[size])}>
         <ReactMarkdown remarkPlugins={remarkPlugins} components={components}>
           {source}
         </ReactMarkdown>
