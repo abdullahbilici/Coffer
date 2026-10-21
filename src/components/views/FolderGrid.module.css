@@ -40,8 +40,8 @@
   width: 34px;
   height: 34px;
   border-radius: var(--radius-md);
-  background: var(--color-accent-soft);
-  color: var(--color-accent);
+  background: var(--color-bg-selected);
+  color: var(--color-text-secondary);
 }
 
 .text {
