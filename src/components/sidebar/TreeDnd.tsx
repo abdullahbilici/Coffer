@@ -264,37 +264,73 @@ function PendingMove({ pending, onConfirm, onDone }: PendingProps) {
     // Measured once, when the confirmation opens.
   }, []);
 
-  const finish = (to: Rect, sink: boolean) => {
+  const lifted = "rotate(-1.5deg) scale(1.03)";
+
+  /** Glides the ghost into the destination's icon, shrinks it there, then flashes the row. */
+  const sinkInto = (ghost: HTMLElement) => {
+    const { glideMs, easing } = motion();
+    const box = ghost.getBoundingClientRect();
+    const icon = row?.querySelector("[data-tree-icon]")?.getBoundingClientRect();
+    const target = icon ?? destination;
+    const dx = target.left + target.width / 2 - (box.left + box.width / 2);
+    const dy = target.top + target.height / 2 - (box.top + box.height / 2);
+    const at = `translate(${dx}px, ${dy}px)`;
+    // Stays readable while it travels; only shrinks away once it reaches the folder.
+    const animation = ghost.animate(
+      [
+        { transform: lifted, opacity: 1 },
+        { transform: `${at} scale(0.55)`, opacity: 1, offset: 0.6 },
+        { transform: `${at} scale(0.05)`, opacity: 0 },
+      ],
+      { duration: glideMs, easing, fill: "forwards" },
+    );
+    row?.animate(
+      [
+        { backgroundColor: "transparent" },
+        {
+          backgroundColor: getComputedStyle(document.documentElement).getPropertyValue(
+            "--color-accent-soft",
+          ),
+        },
+        { backgroundColor: "transparent" },
+      ],
+      { duration: glideMs, delay: glideMs * 0.55, easing },
+    );
+    return animation;
+  };
+
+  /** Flies the ghost back to where the drag started. */
+  const returnHome = (ghost: HTMLElement) => {
+    const { glideMs, easing } = motion();
+    const dx = pending.origin.left - pending.ghost.left;
+    const dy = pending.origin.top - pending.ghost.top;
+    return ghost.animate(
+      [
+        { transform: lifted, opacity: 1 },
+        { transform: `translate(${dx}px, ${dy}px)`, opacity: 0 },
+      ],
+      { duration: glideMs, easing, fill: "forwards" },
+    );
+  };
+
+  const finish = (sink: boolean) => {
     setClosing(true);
     const ghost = ghostRef.current;
     if (!ghost) return onDone();
-    const dx = to.left + to.height / 2 - pending.ghost.left - pending.ghost.height / 2;
-    const dy = to.top - pending.ghost.top;
-    const end = sink
-      ? `translate(${dx}px, ${dy}px) scale(0.2)`
-      : `translate(${to.left - pending.ghost.left}px, ${dy}px)`;
-    ghost
-      .animate(
-        [
-          { transform: "rotate(-1.5deg) scale(1.03)", opacity: 1 },
-          { transform: end, opacity: 0 },
-        ],
-        { duration: motion().glideMs, easing: motion().easing, fill: "forwards" },
-      )
-      .finished.then(onDone, onDone);
+    (sink ? sinkInto(ghost) : returnHome(ghost)).finished.then(onDone, onDone);
   };
 
   const confirm = async () => {
     if (settled.current) return;
     settled.current = true;
     const result = await onConfirm();
-    finish(result === "sink" ? destination : pending.origin, result === "sink");
+    finish(result === "sink");
   };
 
   const cancel = () => {
     if (settled.current) return;
     settled.current = true;
-    finish(pending.origin, false);
+    finish(false);
   };
 
   // Enter confirms, Esc cancels. Capture phase so nothing else reacts to these keys.

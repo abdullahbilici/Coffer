@@ -73,7 +73,7 @@ export function TreeRow({
       >
         <ChevronRight size={14} strokeWidth={2} />
       </span>
-      <Icon size={16} strokeWidth={1.75} className={styles.icon} />
+      <Icon size={16} strokeWidth={1.75} className={styles.icon} data-tree-icon />
       <span className={styles.label}>{label}</span>
       {trailing && <span className={styles.trailing}>{trailing}</span>}
       {actions && (
