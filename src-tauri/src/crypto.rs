@@ -3,7 +3,7 @@ use aes_gcm::{
     aead::{Aead, Generate, Key, KeyInit},
 };
 use security_framework::passwords::{get_generic_password, set_generic_password};
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::error::{AppError, AppResult};
 
@@ -46,14 +46,21 @@ pub fn encrypt(key: &VaultKey, plaintext: &str) -> AppResult<(Vec<u8>, Vec<u8>)>
     Ok((nonce.to_vec(), ciphertext))
 }
 
-pub fn decrypt(key: &VaultKey, nonce: &[u8], ciphertext: &[u8]) -> AppResult<String> {
+pub fn decrypt(key: &VaultKey, nonce: &[u8], ciphertext: &[u8]) -> AppResult<Zeroizing<String>> {
     let nonce = Nonce::try_from(nonce).map_err(|_| crypto_error("Corrupted nonce"))?;
-    let plaintext = Zeroizing::new(
+    let mut bytes = Zeroizing::new(
         cipher(key)?
             .decrypt(&nonce, ciphertext)
             .map_err(|_| crypto_error("Decryption failed"))?,
     );
-    String::from_utf8(plaintext.to_vec()).map_err(|_| crypto_error("Corrupted note"))
+    // Move the buffer into the String (no copy) so the plaintext only ever lives zeroized.
+    String::from_utf8(std::mem::take(&mut *bytes))
+        .map(Zeroizing::new)
+        .map_err(|e| {
+            let mut leftover = e.into_bytes();
+            leftover.zeroize();
+            crypto_error("Corrupted note")
+        })
 }
 
 #[cfg(test)]
@@ -69,7 +76,7 @@ mod tests {
         let key = test_key();
         let (nonce, ciphertext) = encrypt(&key, "sk_live_123 🔑").unwrap();
         assert_eq!(
-            decrypt(&key, &nonce, &ciphertext).unwrap(),
+            decrypt(&key, &nonce, &ciphertext).unwrap().as_str(),
             "sk_live_123 🔑"
         );
     }

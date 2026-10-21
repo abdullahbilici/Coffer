@@ -32,22 +32,30 @@ pub struct PinRef {
     pub id: i64,
 }
 
-const ALL_PINS: &str = "SELECT 'project', id, pin_order FROM projects WHERE pin_order IS NOT NULL
+const ALL_PINS: &str =
+    "SELECT 'project' AS kind, id, pin_order FROM projects WHERE pin_order IS NOT NULL
      UNION ALL SELECT 'folder', id, pin_order FROM folders WHERE pin_order IS NOT NULL
      UNION ALL SELECT 'item', id, pin_order FROM items WHERE pin_order IS NOT NULL";
 
 /// Every pin, in the user's order.
 pub fn list(conn: &Connection) -> AppResult<Vec<PinRef>> {
-    let mut stmt = conn.prepare(&format!("{ALL_PINS} ORDER BY 3"))?;
+    let mut stmt = conn.prepare(&format!("{ALL_PINS} ORDER BY pin_order"))?;
     let rows = stmt.query_map([], |row| {
-        let kind = match row.get::<_, String>(0)?.as_str() {
+        let kind = match row.get::<_, String>("kind")?.as_str() {
             "project" => PinKind::Project,
             "folder" => PinKind::Folder,
-            _ => PinKind::Item,
+            "item" => PinKind::Item,
+            other => {
+                return Err(rusqlite::Error::FromSqlConversionFailure(
+                    0,
+                    rusqlite::types::Type::Text,
+                    format!("unknown pin kind {other:?}").into(),
+                ));
+            }
         };
         Ok(PinRef {
             kind,
-            id: row.get(1)?,
+            id: row.get("id")?,
         })
     })?;
     Ok(rows.collect::<Result<_, _>>()?)

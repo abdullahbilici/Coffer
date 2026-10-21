@@ -33,7 +33,7 @@ pub fn seal_inline(state: &AppState, body: &str) -> AppResult<Option<(String, Se
 /// Decrypts a sealed body. With a template, the decrypted spans are put back into it.
 pub fn open(state: &AppState, template: Option<&str>, sealed: &SecureBody) -> AppResult<String> {
     let key = state.session().active_key()?;
-    let plaintext = Zeroizing::new(crypto::decrypt(&key, &sealed.nonce, &sealed.ciphertext)?);
+    let plaintext = crypto::decrypt(&key, &sealed.nonce, &sealed.ciphertext)?;
     let Some(template) = template else {
         return Ok(plaintext.to_string());
     };

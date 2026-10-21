@@ -27,8 +27,8 @@ pub fn list(conn: &Connection) -> AppResult<Vec<ProjectSummary>> {
     let mut stmt = conn.prepare("SELECT id, name FROM projects ORDER BY name COLLATE NOCASE")?;
     let rows = stmt.query_map([], |row| {
         Ok(ProjectSummary {
-            id: row.get(0)?,
-            name: row.get(1)?,
+            id: row.get("id")?,
+            name: row.get("name")?,
         })
     })?;
     Ok(rows.collect::<Result<_, _>>()?)
@@ -36,15 +36,16 @@ pub fn list(conn: &Connection) -> AppResult<Vec<ProjectSummary>> {
 
 pub fn get(conn: &Connection, id: i64) -> AppResult<Project> {
     Ok(conn.query_row(
-        "SELECT id, name, readme, updated_at, readme_ciphertext IS NOT NULL FROM projects WHERE id = ?1",
+        "SELECT id, name, readme, updated_at, readme_ciphertext IS NOT NULL AS has_secrets
+         FROM projects WHERE id = ?1",
         [id],
         |row| {
             Ok(Project {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                readme: row.get(2)?,
-                has_secrets: row.get(4)?,
-                updated_at: row.get(3)?,
+                id: row.get("id")?,
+                name: row.get("name")?,
+                readme: row.get("readme")?,
+                has_secrets: row.get("has_secrets")?,
+                updated_at: row.get("updated_at")?,
             })
         },
     )?)
@@ -96,10 +97,10 @@ pub fn readme_secrets(conn: &Connection, id: i64) -> AppResult<(String, SecureBo
         [id],
         |row| {
             Ok((
-                row.get(0)?,
+                row.get("readme")?,
                 SecureBody {
-                    nonce: row.get(1)?,
-                    ciphertext: row.get(2)?,
+                    nonce: row.get("readme_nonce")?,
+                    ciphertext: row.get("readme_ciphertext")?,
                 },
             ))
         },
@@ -108,8 +109,7 @@ pub fn readme_secrets(conn: &Connection, id: i64) -> AppResult<(String, SecureBo
 
 /// Deletes the project with all of its folders and items.
 pub fn delete(conn: &Connection, id: i64) -> AppResult<()> {
-    conn.execute("DELETE FROM projects WHERE id = ?1", [id])?;
-    Ok(())
+    expect_changed(conn.execute("DELETE FROM projects WHERE id = ?1", [id])?)
 }
 
 #[cfg(test)]

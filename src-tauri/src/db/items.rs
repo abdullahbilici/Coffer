@@ -58,19 +58,21 @@ pub struct ItemRecord<'a> {
     pub tags: &'a [String],
 }
 
-const SUMMARY_COLUMNS: &str = "id, project_id, folder_id, title, secure, updated_at, secure = 0 AND ciphertext IS NOT NULL, created_at";
+/// Read by name in `to_summary`, so adding or reordering columns can't shift values.
+const SUMMARY_COLUMNS: &str = "id, project_id, folder_id, title, secure, updated_at, created_at,
+     secure = 0 AND ciphertext IS NOT NULL AS has_secrets";
 
 fn to_summary(row: &rusqlite::Row) -> rusqlite::Result<ItemSummary> {
     Ok(ItemSummary {
-        id: row.get(0)?,
-        project_id: row.get(1)?,
-        folder_id: row.get(2)?,
-        title: row.get(3)?,
-        secure: row.get(4)?,
-        has_secrets: row.get(6)?,
+        id: row.get("id")?,
+        project_id: row.get("project_id")?,
+        folder_id: row.get("folder_id")?,
+        title: row.get("title")?,
+        secure: row.get("secure")?,
+        has_secrets: row.get("has_secrets")?,
         tags: Vec::new(),
-        updated_at: row.get(5)?,
-        created_at: row.get(7)?,
+        updated_at: row.get("updated_at")?,
+        created_at: row.get("created_at")?,
     })
 }
 
@@ -92,7 +94,7 @@ pub fn get(conn: &Connection, id: i64) -> AppResult<Item> {
     let (mut summary, body) = conn.query_row(
         &format!("SELECT {SUMMARY_COLUMNS}, body FROM items WHERE id = ?1"),
         [id],
-        |row| Ok((to_summary(row)?, row.get::<_, Option<String>>(8)?)),
+        |row| Ok((to_summary(row)?, row.get::<_, Option<String>>("body")?)),
     )?;
     summary.tags = tags_of(conn, id)?;
     let body = if summary.secure { None } else { body };
@@ -108,12 +110,12 @@ pub fn encrypted(conn: &Connection, id: i64) -> AppResult<Encrypted> {
         "SELECT secure, body, nonce, ciphertext FROM items WHERE id = ?1 AND ciphertext IS NOT NULL",
         [id],
         |row| {
-            let secure: bool = row.get(0)?;
+            let secure: bool = row.get("secure")?;
             Ok(Encrypted {
-                template: if secure { None } else { row.get(1)? },
+                template: if secure { None } else { row.get("body")? },
                 sealed: SecureBody {
-                    nonce: row.get(2)?,
-                    ciphertext: row.get(3)?,
+                    nonce: row.get("nonce")?,
+                    ciphertext: row.get("ciphertext")?,
                 },
             })
         },
@@ -210,8 +212,7 @@ pub fn move_to(
 }
 
 pub fn delete(conn: &Connection, id: i64) -> AppResult<()> {
-    conn.execute("DELETE FROM items WHERE id = ?1", [id])?;
-    Ok(())
+    expect_changed(conn.execute("DELETE FROM items WHERE id = ?1", [id])?)
 }
 
 fn replace_tags(conn: &Connection, id: i64, tags: &[String]) -> AppResult<()> {
@@ -236,7 +237,9 @@ fn all_tags(conn: &Connection) -> AppResult<HashMap<i64, Vec<String>>> {
     let mut rows = stmt.query([])?;
     let mut tags: HashMap<i64, Vec<String>> = HashMap::new();
     while let Some(row) = rows.next()? {
-        tags.entry(row.get(0)?).or_default().push(row.get(1)?);
+        tags.entry(row.get("item_id")?)
+            .or_default()
+            .push(row.get("tag")?);
     }
     Ok(tags)
 }
