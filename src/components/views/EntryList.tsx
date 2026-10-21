@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react";
+import { cx } from "../../lib/cx";
 import { TagList } from "./TagList";
 import styles from "./EntryList.module.css";
 
@@ -8,6 +9,8 @@ export type Entry = {
   title: string;
   subtitle?: string;
   tags?: string[];
+  /** Draws the icon on a tinted tile; used for folders so they stand apart from notes. */
+  boxed?: boolean;
   onOpen: () => void;
 };
 
@@ -22,9 +25,12 @@ export function EntryList({ entries, emptyText, onSelectTag }: Props) {
   if (entries.length === 0) return <p className={styles.empty}>{emptyText}</p>;
   return (
     <ul className={styles.list}>
-      {entries.map(({ key, icon: Icon, title, subtitle, tags, onOpen }) => (
+      {entries.map(({ key, icon: Icon, title, subtitle, tags, boxed, onOpen }) => (
         <li key={key} className={styles.row} onClick={onOpen}>
-          <Icon size={16} strokeWidth={1.75} className={styles.icon} />
+          {/* Every icon gets the same slot, so boxed and plain rows keep their titles aligned. */}
+          <span className={cx(styles.iconSlot, boxed && styles.boxed)}>
+            <Icon size={16} strokeWidth={1.75} />
+          </span>
           <div className={styles.text}>
             <span className={styles.title}>{title}</span>
             {subtitle && <span className={styles.location}>{subtitle}</span>}

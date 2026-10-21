@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
+import { useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
+import { useStoredState } from "../../hooks/useStoredState";
 import { cx } from "../../lib/cx";
 import styles from "./SplitPanes.module.css";
 
@@ -22,24 +23,6 @@ const DEFAULT_LAYOUT: Layout = { collapsed: [], ratio: 0.65 };
 /** Smallest share either pane can be dragged to. */
 const MIN_RATIO = 0.15;
 
-// Layout is a per-viewer convenience; losing it just restores the default.
-function loadLayout(): Layout {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? { ...DEFAULT_LAYOUT, ...(JSON.parse(raw) as Partial<Layout>) } : DEFAULT_LAYOUT;
-  } catch {
-    return DEFAULT_LAYOUT;
-  }
-}
-
-function saveLayout(layout: Layout) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(layout));
-  } catch {
-    // Storage unavailable: keep the layout for this session only.
-  }
-}
-
 /**
  * Two collapsible, independently scrolling panes with a draggable divider, like the views in
  * VS Code's sidebar.
@@ -48,11 +31,9 @@ function saveLayout(layout: Layout) {
  * Content stays mounted while collapsed, so nothing re-renders or replays on open.
  */
 export function SplitPanes({ top, bottom }: { top: Pane; bottom: Pane }) {
-  const [layout, setLayout] = useState(loadLayout);
+  const [layout, setLayout] = useStoredState<Layout>(STORAGE_KEY, DEFAULT_LAYOUT);
   const [resizing, setResizing] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => saveLayout(layout), [layout]);
 
   const topOpen = !layout.collapsed.includes(top.id);
   const bottomOpen = !layout.collapsed.includes(bottom.id);

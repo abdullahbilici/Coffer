@@ -27,9 +27,19 @@
   background: var(--color-bg-hover);
 }
 
-.icon {
+.iconSlot {
+  display: grid;
+  place-items: center;
   flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
   color: var(--color-text-tertiary);
+}
+
+.boxed {
+  background: var(--color-bg-selected);
+  color: var(--color-text-secondary);
 }
 
 .text {
