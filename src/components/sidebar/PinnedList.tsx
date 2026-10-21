@@ -38,6 +38,9 @@ function reorder(order: string[], dragged: string, drop: Drop): string[] | null 
   return rest.join() === order.join() ? null : rest;
 }
 
+/** The dragged pin's tilt; matches `.pinGhost` in Sidebar.module.css. */
+const LIFTED = "rotate(-1deg) scale(1.02)";
+
 /** Pointer travel before a press turns into a drag, so clicks still open the pin. */
 const DRAG_THRESHOLD_PX = 5;
 
@@ -177,11 +180,7 @@ export function PinnedList({ tree, selection, actions }: Props) {
 
   if (rows.length === 0) return <p className={styles.empty}>No pins</p>;
 
-  // The overlay keeps showing the last dragged pin while it lands.
-  const lastActive = useRef<Resolved | null>(null);
   const active = pins.find((p) => pinKey(p.pin) === dragging) ?? null;
-  if (active) lastActive.current = active;
-  const ghost = active ?? lastActive.current;
 
   // The ghost glides into the slot while the real row stays hidden, then they swap.
   const { glideMs, easing } = motion();
@@ -204,7 +203,18 @@ export function PinnedList({ tree, selection, actions }: Props) {
         },
       ];
     },
-    sideEffects: defaultDropAnimationSideEffects({ styles: { active: { opacity: "0" } } }),
+    // dnd-kit freezes the overlay's children while it lands, so a CSS class can't flatten the
+    // tilt; animate the inner surface directly, in step with the glide.
+    sideEffects: (params) => {
+      const restore = defaultDropAnimationSideEffects({ styles: { active: { opacity: "0" } } })(
+        params,
+      );
+      params.dragOverlay.node.firstElementChild?.animate(
+        [{ transform: LIFTED }, { transform: "none" }],
+        { duration: glideMs, easing, fill: "forwards" },
+      );
+      return restore;
+    },
   };
 
   // Only rows that are new to the list grow in; rows that just moved stay put.
@@ -244,16 +254,16 @@ export function PinnedList({ tree, selection, actions }: Props) {
         ))}
       </div>
       <DragOverlay dropAnimation={dropAnimation} className={styles.pinOverlay}>
-        {ghost && (
+        {active && (
           // A copy of the row itself: lifted while dragging, flat again as it lands, so it
           // matches the real row exactly when they swap.
-          <div className={cx(styles.pinGhost, !active && styles.landing)}>
+          <div className={styles.pinGhost}>
             <TreeRow
               depth={0}
-              icon={ghost.icon}
-              label={ghost.label}
-              selected={ghost.selected}
-              trailing={ghost.location || undefined}
+              icon={active.icon}
+              label={active.label}
+              selected={active.selected}
+              trailing={active.location || undefined}
             />
           </div>
         )}

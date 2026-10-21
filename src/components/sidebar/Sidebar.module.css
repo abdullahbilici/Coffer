@@ -128,15 +128,10 @@
 
 .pinGhost {
   transform: rotate(-1deg) scale(1.02);
-  transition: transform var(--duration-glide) var(--ease-out);
 }
 
 /* The overlay is exactly the row's size; the row's own side margins would overflow it. */
 .pinGhost > div {
   margin: 0;
   animation: none;
-}
-
-.landing {
-  transform: none;
 }
