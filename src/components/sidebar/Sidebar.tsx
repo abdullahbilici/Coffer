@@ -24,6 +24,8 @@ type Props = {
   onToggle: (key: string) => void;
   onExpand: (keys: string[]) => void;
   onCollapseAll: (section: TreeSection) => void;
+  /** Tree node keys animating out before deletion. */
+  deleting: ReadonlySet<string>;
   query: string;
   onQueryChange: (query: string) => void;
   edit: TreeEdit | null;
@@ -121,6 +123,7 @@ export function Sidebar(props: Props) {
                   onToggle={onToggle}
                   onExpand={onExpand}
                   isPinned={isPinned}
+                  deleting={props.deleting}
                   actions={actions}
                 />
               </TreeDndProvider>

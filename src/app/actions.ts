@@ -26,7 +26,8 @@ export type VaultActions = {
 
   duplicateItem: (id: number) => void;
   setPinned: (pin: PinRef, pinned: boolean) => void;
-  reorderPins: (order: PinRef[]) => void;
+  /** Resolves once the tree has reloaded with the new order. */
+  reorderPins: (order: PinRef[]) => Promise<void>;
   deleteItem: (id: number) => void;
   moveItem: (id: number, projectId: number, folderId: number | null) => void;
 };

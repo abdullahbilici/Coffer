@@ -20,6 +20,7 @@ import { itemIcon } from "../itemIcon";
 import { IconButton } from "../ui/IconButton";
 import { Menu, type MenuAnchor, type MenuItem } from "../ui/Menu";
 import { sameTarget, useTreeDnd, useTreeNode } from "./TreeDnd";
+import { Collapse } from "../ui/Collapse";
 import { TreeEditRow, TreeRow } from "./TreeRow";
 import styles from "./Sidebar.module.css";
 
@@ -39,6 +40,7 @@ type Props = {
   onToggle: (key: string) => void;
   onExpand: (keys: string[]) => void;
   isPinned: (kind: PinKind, id: number) => boolean;
+  deleting: ReadonlySet<string>;
   actions: VaultActions;
 };
 
@@ -157,7 +159,7 @@ function ProjectBranch({ node, ctx }: { node: ProjectNode; ctx: Context }) {
   ];
 
   return (
-    <>
+    <Collapse leaving={ctx.deleting.has(key)}>
       {edit?.type === "renameProject" && edit.id === project.id ? (
         <TreeEditRow
           depth={0}
@@ -208,7 +210,7 @@ function ProjectBranch({ node, ctx }: { node: ProjectNode; ctx: Context }) {
           ctx={ctx}
         />
       )}
-    </>
+    </Collapse>
   );
 }
 
@@ -305,7 +307,7 @@ function FolderBranch({ node, depth, ctx }: { node: FolderNode; depth: number; c
   ];
 
   return (
-    <>
+    <Collapse leaving={ctx.deleting.has(key)}>
       {edit?.type === "renameFolder" && edit.id === folder.id ? (
         <TreeEditRow
           depth={depth}
@@ -356,7 +358,7 @@ function FolderBranch({ node, depth, ctx }: { node: FolderNode; depth: number; c
           ctx={ctx}
         />
       )}
-    </>
+    </Collapse>
   );
 }
 
@@ -383,23 +385,25 @@ function ItemRow({ item, container, depth, ctx }: ItemRowProps) {
     },
   ];
   return (
-    <TreeRow
-      depth={depth}
-      icon={itemIcon(item)}
-      label={item.title}
-      trailing={pinBadge(ctx.isPinned("item", item.id))}
-      dnd={dnd}
-      selected={selection?.kind === "item" && selection.id === item.id}
-      onClick={() => actions.openItem(item)}
-      onContextMenu={(e) => openMenu(e, menuItems)}
-      actions={
-        <IconButton
-          icon={Ellipsis}
-          label="More"
-          size="sm"
-          onClick={(e) => openMenu(e, menuItems)}
-        />
-      }
-    />
+    <Collapse leaving={ctx.deleting.has(`item:${item.id}`)}>
+      <TreeRow
+        depth={depth}
+        icon={itemIcon(item)}
+        label={item.title}
+        trailing={pinBadge(ctx.isPinned("item", item.id))}
+        dnd={dnd}
+        selected={selection?.kind === "item" && selection.id === item.id}
+        onClick={() => actions.openItem(item)}
+        onContextMenu={(e) => openMenu(e, menuItems)}
+        actions={
+          <IconButton
+            icon={Ellipsis}
+            label="More"
+            size="sm"
+            onClick={(e) => openMenu(e, menuItems)}
+          />
+        }
+      />
+    </Collapse>
   );
 }

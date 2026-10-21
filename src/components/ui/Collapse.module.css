@@ -1,0 +1,4 @@
+.leaving {
+  overflow: hidden;
+  pointer-events: none;
+}

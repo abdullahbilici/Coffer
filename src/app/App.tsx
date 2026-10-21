@@ -17,6 +17,7 @@ import { useToast } from "../hooks/useToast";
 import { useVault } from "../hooks/useVault";
 import { api, errorMessage, type ItemSummary, type SaveItemInput } from "../lib/api";
 import { inSection, nodeKey, type Selection, type TreeSection } from "../lib/selection";
+import { motion } from "../lib/motion";
 import { hasTag } from "../lib/tags";
 import { folderPath } from "../lib/tree";
 import type { Run, VaultActions } from "./actions";
@@ -30,6 +31,8 @@ export function App() {
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
   const [query, setQuery] = useState("");
   const [treeEdit, setTreeEdit] = useState<TreeEdit | null>(null);
+  /** Tree node keys closing before they are deleted (`item:3`, `folder:2`, `project:1`). */
+  const [deleting, setDeleting] = useState<ReadonlySet<string>>(() => new Set());
 
   const { show: showToast } = toast;
   const showError = useCallback((error: unknown) => showToast(errorMessage(error)), [showToast]);
@@ -177,6 +180,29 @@ export function App() {
     [expandTo, select],
   );
 
+  /**
+   * Deletes after the tree row (and its open children) has closed. Touch ID comes first, so a
+   * cancelled prompt never starts the animation; a failed delete brings the row back.
+   */
+  const deleteWithExit = useCallback(
+    async (key: string, remove: () => Promise<void>) => {
+      await session.ensureUnlocked();
+      setDeleting((d) => new Set(d).add(key));
+      try {
+        await new Promise((resolve) => setTimeout(resolve, motion().baseMs));
+        await session.withUnlock(remove);
+        await reload();
+      } finally {
+        setDeleting((d) => {
+          const next = new Set(d);
+          next.delete(key);
+          return next;
+        });
+      }
+    },
+    [session, reload],
+  );
+
   /** Rejects on failure (after showing a toast) so the editor stays open with the draft. */
   const saveItem = useCallback(
     async (input: SaveItemInput) => {
@@ -226,8 +252,7 @@ export function App() {
         }),
       deleteProject: (id) =>
         run(async () => {
-          await session.withUnlock(() => api.deleteProject(id));
-          await reload();
+          await deleteWithExit(nodeKey.project(id), () => api.deleteProject(id));
           setSelection(null);
         }),
 
@@ -262,8 +287,7 @@ export function App() {
         }),
       deleteFolder: (id) =>
         run(async () => {
-          await session.withUnlock(() => api.deleteFolder(id));
-          await reload();
+          await deleteWithExit(nodeKey.folder(id), () => api.deleteFolder(id));
           setSelection(null);
         }),
 
@@ -285,12 +309,11 @@ export function App() {
         }),
       deleteItem: (id) =>
         run(async () => {
-          await session.withUnlock(() => api.deleteItem(id));
-          await reload();
+          await deleteWithExit(`item:${id}`, () => api.deleteItem(id));
           setSelection((s) => (s?.kind === "item" && s.id === id ? null : s));
         }),
     }),
-    [run, reload, select, openItem, expandTo, tree, session],
+    [run, reload, select, openItem, expandTo, tree, session, deleteWithExit],
   );
 
   if (!session.entered) {
@@ -398,6 +421,7 @@ export function App() {
         onToggle={toggle}
         onExpand={expand}
         onCollapseAll={collapseAll}
+        deleting={deleting}
         query={query}
         onQueryChange={setQuery}
         edit={treeEdit}

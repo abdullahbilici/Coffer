@@ -48,12 +48,18 @@ export function PinnedList({ tree, selection, actions }: Props) {
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ anchor: MenuAnchor; pin: PinRef } | null>(null);
+  // A dropped order shows immediately, so the drop animation lands on the new slot instead of
+  // flying back while the backend catches up.
+  const [optimistic, setOptimistic] = useState<string[] | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: DRAG_THRESHOLD_PX } }),
   );
 
   const projectName = (id: number) => tree.projects.find((p) => p.id === id)?.name ?? "";
-  const pins = tree.pins.flatMap((pin): Resolved[] => {
+  const ordered = optimistic
+    ? [...tree.pins].sort((a, b) => optimistic.indexOf(pinKey(a)) - optimistic.indexOf(pinKey(b)))
+    : tree.pins;
+  const pins = ordered.flatMap((pin): Resolved[] => {
     const isSelected = (kind: string, id: number) =>
       selection?.kind === kind && "id" in selection && selection.id === id;
     if (pin.kind === "project") {
@@ -144,7 +150,8 @@ export function PinnedList({ tree, selection, actions }: Props) {
     const next = pins.map((p) => p.pin);
     const [moved] = next.splice(a, 1);
     next.splice(b, 0, moved);
-    actions.reorderPins(next);
+    setOptimistic(next.map(pinKey));
+    void actions.reorderPins(next).finally(() => setOptimistic(null));
   };
 
   if (rows.length === 0) return <p className={styles.empty}>No pins</p>;
