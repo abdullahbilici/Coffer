@@ -71,7 +71,7 @@ export function TreeRow({
           onToggle?.();
         }}
       >
-        <ChevronRight size={14} strokeWidth={2} />
+        <ChevronRight size={14} strokeWidth={1.75} />
       </span>
       <Icon size={16} strokeWidth={1.75} className={styles.icon} data-tree-icon />
       <span className={styles.label}>{label}</span>

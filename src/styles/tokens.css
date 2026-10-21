@@ -34,6 +34,8 @@
   --duration-slow: 260ms;
   /* Drag-and-drop landings: the ghost gliding into its slot or back home. */
   --duration-glide: 380ms;
+  /* A dragged row lifted off the page. */
+  --transform-lifted: rotate(-1.5deg) scale(1.03);
   --ease-out: cubic-bezier(0.22, 0.8, 0.24, 1);
   --ease-in: cubic-bezier(0.4, 0, 1, 1);
 

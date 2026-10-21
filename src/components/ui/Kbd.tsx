@@ -5,7 +5,7 @@ import styles from "./Kbd.module.css";
 export function Kbd({ letter }: { letter: string }) {
   return (
     <kbd className={styles.kbd} aria-label={`Command ${letter}`}>
-      <Command size={10} strokeWidth={2} />
+      <Command size={12} strokeWidth={1.75} />
       {letter}
     </kbd>
   );

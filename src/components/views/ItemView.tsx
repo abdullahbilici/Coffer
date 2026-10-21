@@ -4,9 +4,8 @@ import type { Run, VaultActions } from "../../app/actions";
 import type { Session } from "../../hooks/useSession";
 import { api, type Item, type SaveItemInput, type Tree } from "../../lib/api";
 import { pinnedSet } from "../../lib/pins";
-import { folderPath } from "../../lib/tree";
 import { Button } from "../ui/Button";
-import { Breadcrumb } from "./Breadcrumb";
+import { Breadcrumb, pathCrumbs } from "./Breadcrumb";
 import { ItemBody } from "./ItemBody";
 import { ItemEditor } from "./ItemEditor";
 import { TagList } from "./TagList";
@@ -83,20 +82,7 @@ export function ItemView({ itemId, tree, session, run, actions, onSave, onCopy }
         <header className={viewStyles.header}>
           <div>
             {project && (
-              <Breadcrumb
-                crumbs={[
-                  {
-                    key: `project:${project.id}`,
-                    label: project.name,
-                    onClick: () => actions.selectProject(project.id),
-                  },
-                  ...folderPath(tree.folders, summary.folderId).map((f) => ({
-                    key: `folder:${f.id}`,
-                    label: f.name,
-                    onClick: () => actions.selectFolder(f.id),
-                  })),
-                ]}
-              />
+              <Breadcrumb crumbs={pathCrumbs(tree, summary.projectId, summary.folderId, actions)} />
             )}
           </div>
           <div className={viewStyles.actions}>

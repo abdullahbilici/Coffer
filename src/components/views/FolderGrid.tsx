@@ -19,7 +19,7 @@ export function FolderGrid({ folders, describe, isPinned, onOpen }: Props) {
         <li key={folder.id}>
           <button type="button" className={styles.card} onClick={() => onOpen(folder)}>
             <span className={styles.iconWrap}>
-              <Folder size={18} strokeWidth={1.75} />
+              <Folder size={20} strokeWidth={1.75} />
             </span>
             <span className={styles.text}>
               <span className={styles.name}>

@@ -262,7 +262,7 @@ function PendingMove({ pending, onConfirm, onDone }: PendingProps) {
     });
   }, [anchor]);
 
-  const lifted = "rotate(-1.5deg) scale(1.03)";
+  const { lifted } = motion();
 
   /** Glides the ghost into the destination's icon, shrinks it there, then flashes the row. */
   const sinkInto = (ghost: HTMLElement) => {
@@ -371,7 +371,7 @@ function PendingMove({ pending, onConfirm, onDone }: PendingProps) {
           </Button>
           <Button variant="primary" size="sm" autoFocus onClick={() => void confirm()}>
             Move
-            <CornerDownLeft size={13} strokeWidth={2} />
+            <CornerDownLeft size={14} strokeWidth={1.75} />
           </Button>
         </div>
       </div>

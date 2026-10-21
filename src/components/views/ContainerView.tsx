@@ -11,7 +11,7 @@ import { itemIcon } from "../itemIcon";
 import { Button } from "../ui/Button";
 import { Segmented } from "../ui/Segmented";
 import { Select } from "../ui/Select";
-import { Breadcrumb, type Crumb } from "./Breadcrumb";
+import { Breadcrumb, pathCrumbs } from "./Breadcrumb";
 import { EntryList, type Entry } from "./EntryList";
 import { FolderGrid } from "./FolderGrid";
 import { ProjectOverview } from "./ProjectOverview";
@@ -94,18 +94,7 @@ function Container({
   };
 
   // The full path is the page header; the last crumb is where we are.
-  const crumbs: Crumb[] = [
-    {
-      key: `project:${project.id}`,
-      label: project.name,
-      onClick: folder ? () => actions.selectProject(project.id) : undefined,
-    },
-    ...path.map((f) => ({
-      key: `folder:${f.id}`,
-      label: f.name,
-      onClick: f.id === folder?.id ? undefined : () => actions.selectFolder(f.id),
-    })),
-  ];
+  const crumbs = pathCrumbs(tree, projectId, folderId, actions, { current: true });
 
   // List view: folders as rows with a boxed icon, ahead of the notes.
   const folderEntries: Entry[] = subfolders.map((sub) => ({

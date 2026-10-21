@@ -74,9 +74,13 @@ export function folderOptions(tree: Tree, projectId: number): FolderOption[] {
   return options;
 }
 
-/** "Project / Folder / Sub" location label for an item. */
-export function locationLabel(tree: Tree, item: ItemSummary): string {
-  const project = tree.projects.find((p) => p.id === item.projectId)?.name ?? "";
-  const folders = folderPath(tree.folders, item.folderId).map((f) => f.name);
+/** "Project / Folder / Sub" for a place in a project (`folderId` null = the root). */
+export function pathLabel(tree: Tree, projectId: number, folderId: number | null): string {
+  const project = tree.projects.find((p) => p.id === projectId)?.name ?? "";
+  const folders = folderPath(tree.folders, folderId).map((f) => f.name);
   return [project, ...folders].join(" / ");
 }
+
+/** Where an item lives. */
+export const locationLabel = (tree: Tree, item: ItemSummary) =>
+  pathLabel(tree, item.projectId, item.folderId);

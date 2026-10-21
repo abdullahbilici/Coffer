@@ -11,5 +11,6 @@ export function motion() {
     slowMs: reduced ? 1 : ms("--duration-slow"),
     glideMs: reduced ? 1 : ms("--duration-glide"),
     easing: css.getPropertyValue("--ease-out").trim() || "ease-out",
+    lifted: css.getPropertyValue("--transform-lifted").trim() || "none",
   };
 }

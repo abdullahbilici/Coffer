@@ -1,6 +1,10 @@
 import { Fragment } from "react";
 import { ChevronRight } from "lucide-react";
+import type { VaultActions } from "../../app/actions";
+import type { Tree } from "../../lib/api";
 import { cx } from "../../lib/cx";
+import { nodeKey } from "../../lib/selection";
+import { folderPath } from "../../lib/tree";
 import styles from "./Breadcrumb.module.css";
 
 export type Crumb = {
@@ -9,6 +13,34 @@ export type Crumb = {
   /** Omit for the current place: it renders emphasised and isn't clickable. */
   onClick?: () => void;
 };
+
+/**
+ * Crumbs from a project root down to `folderId`, each navigating there. With `current`, the
+ * last crumb is the page you're on and isn't a link.
+ */
+export function pathCrumbs(
+  tree: Tree,
+  projectId: number,
+  folderId: number | null,
+  actions: VaultActions,
+  { current = false } = {},
+): Crumb[] {
+  const project = tree.projects.find((p) => p.id === projectId);
+  const crumbs: Crumb[] = [
+    {
+      key: nodeKey.project(projectId),
+      label: project?.name ?? "",
+      onClick: () => actions.selectProject(projectId),
+    },
+    ...folderPath(tree.folders, folderId).map((f) => ({
+      key: nodeKey.folder(f.id),
+      label: f.name,
+      onClick: () => actions.selectFolder(f.id),
+    })),
+  ];
+  if (current) crumbs[crumbs.length - 1] = { ...crumbs[crumbs.length - 1], onClick: undefined };
+  return crumbs;
+}
 
 type Props = {
   crumbs: Crumb[];
@@ -25,7 +57,7 @@ export function Breadcrumb({ crumbs, variant = "trail" }: Props) {
           {i > 0 && (
             <ChevronRight
               size={variant === "path" ? 16 : 12}
-              strokeWidth={2}
+              strokeWidth={1.75}
               className={styles.separator}
             />
           )}

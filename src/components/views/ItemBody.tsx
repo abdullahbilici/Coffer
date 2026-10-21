@@ -64,7 +64,7 @@ export function ItemBody({ item, session, run, onCopy, title }: Props) {
       {bodyHidden ? (
         <div className={styles.hidden}>
           <button type="button" className={styles.mask} onClick={() => toggle(WHOLE_BODY)}>
-            <LockKeyhole size={12} strokeWidth={2} />
+            <LockKeyhole size={12} strokeWidth={1.75} />
             hidden
           </button>
         </div>

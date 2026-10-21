@@ -29,7 +29,7 @@ export function SecretChip({ value, shown, onToggle, onCopy, className }: Props)
         onClick={onToggle}
       >
         {/* Re-keyed on every toggle so the icon crossfades instead of snapping. */}
-        <Eyes key={String(visible)} size={13} strokeWidth={2} className={styles.swap} />
+        <Eyes key={String(visible)} size={14} strokeWidth={1.75} className={styles.swap} />
         {!visible && <span className={styles.masked}>hidden</span>}
       </button>
       {visible ? (
@@ -38,7 +38,7 @@ export function SecretChip({ value, shown, onToggle, onCopy, className }: Props)
         </button>
       ) : (
         <button type="button" className={styles.copy} aria-label="Copy" onClick={onCopy}>
-          <Copy size={13} strokeWidth={2} />
+          <Copy size={14} strokeWidth={1.75} />
         </button>
       )}
     </span>

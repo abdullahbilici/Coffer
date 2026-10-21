@@ -18,7 +18,7 @@
   white-space: nowrap;
   width: max-content;
   max-width: 260px;
-  transform: rotate(-1.5deg) scale(1.03);
+  transform: var(--transform-lifted);
   animation: lift var(--duration-base) var(--ease-out);
 }
 

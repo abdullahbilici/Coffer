@@ -40,7 +40,7 @@ export function TagInput({ value, onChange, suggestions }: Props) {
             aria-label={`Remove ${tag}`}
             onClick={() => onChange(value.filter((t) => t !== tag))}
           >
-            <X size={12} strokeWidth={2} />
+            <X size={12} strokeWidth={1.75} />
           </button>
         </span>
       ))}

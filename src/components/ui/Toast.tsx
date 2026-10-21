@@ -19,7 +19,7 @@ export function Toast({ toast, onDismiss }: Props) {
       role={toast.tone === "error" ? "alert" : "status"}
       className={cx(styles.toast, toast.leaving && styles.leaving)}
     >
-      <Icon size={16} strokeWidth={2} className={styles[toast.tone]} />
+      <Icon size={16} strokeWidth={1.75} className={styles[toast.tone]} />
       <span className={styles.message}>{toast.message}</span>
       {toast.tone === "error" && (
         <button type="button" className={styles.close} aria-label="Dismiss" onClick={onDismiss}>

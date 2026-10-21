@@ -14,7 +14,8 @@ import type { Session } from "../../hooks/useSession";
 import { api, type Item, type ItemSummary, type Tree } from "../../lib/api";
 import { cx } from "../../lib/cx";
 import { buildTagTree, hasTag, type TagNode } from "../../lib/tags";
-import { folderPath, locationLabel } from "../../lib/tree";
+import { toggled } from "../../lib/sets";
+import { locationLabel, pathLabel } from "../../lib/tree";
 import { itemIcon } from "../itemIcon";
 import { Button } from "../ui/Button";
 import { ItemBody } from "./ItemBody";
@@ -73,18 +74,6 @@ export function SearchView({ query, tree, session, run, actions, onCopy }: Props
     tag: topmost(allTags(buildTagTree(tree.items)).filter((t) => matches(t.path))),
   };
 
-  const toggle = <T,>(set: ReadonlySet<T>, value: T) => {
-    const next = new Set(set);
-    if (!next.delete(value)) next.add(value);
-    return next;
-  };
-
-  const folderLocation = (folderId: number, projectId: number) => {
-    const project = tree.projects.find((p) => p.id === projectId)?.name ?? "";
-    const parents = folderPath(tree.folders, folderId).slice(0, -1);
-    return [project, ...parents.map((f) => f.name)].join(" / ");
-  };
-
   const count = KINDS.filter((k) => kinds.has(k.kind)).reduce(
     (sum, k) => sum + results[k.kind].length,
     0,
@@ -108,7 +97,7 @@ export function SearchView({ query, tree, session, run, actions, onCopy }: Props
                 type="button"
                 aria-pressed={kinds.has(kind)}
                 className={styles.filter}
-                onClick={() => setKinds((k) => toggle(k, kind))}
+                onClick={() => setKinds((k) => toggled(k, kind))}
               >
                 <Icon size={14} strokeWidth={1.75} />
                 {label}
@@ -138,7 +127,7 @@ export function SearchView({ query, tree, session, run, actions, onCopy }: Props
                   key={`folder:${folder.id}`}
                   icon={Folder}
                   title={folder.name}
-                  subtitle={folderLocation(folder.id, folder.projectId)}
+                  subtitle={pathLabel(tree, folder.projectId, folder.parentId)}
                   onOpen={() => actions.selectFolder(folder.id)}
                 />
               ))}
@@ -149,7 +138,7 @@ export function SearchView({ query, tree, session, run, actions, onCopy }: Props
                   item={item}
                   location={locationLabel(tree, item)}
                   open={open.has(`note:${item.id}`)}
-                  onToggle={() => setOpen((o) => toggle(o, `note:${item.id}`))}
+                  onToggle={() => setOpen((o) => toggled(o, `note:${item.id}`))}
                   session={session}
                   run={run}
                   actions={actions}
@@ -164,7 +153,7 @@ export function SearchView({ query, tree, session, run, actions, onCopy }: Props
                   notes={tree.items.filter((i) => hasTag(i, tag.path))}
                   tree={tree}
                   open={open.has(`tag:${tag.path}`)}
-                  onToggle={() => setOpen((o) => toggle(o, `tag:${tag.path}`))}
+                  onToggle={() => setOpen((o) => toggled(o, `tag:${tag.path}`))}
                   actions={actions}
                 />
               ))}
@@ -181,7 +170,7 @@ function NavRow({ icon: Icon, title, subtitle, onOpen }: NavRowProps) {
   return (
     <li className={styles.entry}>
       <button type="button" className={styles.row} onClick={onOpen}>
-        <Icon size={20} strokeWidth={1.5} className={styles.icon} />
+        <Icon size={20} strokeWidth={1.75} className={styles.icon} />
         <span className={styles.text}>
           <span className={styles.title}>{title}</span>
           <span className={styles.subtitle}>{subtitle}</span>
@@ -227,7 +216,7 @@ function NoteRow({ item, location, open, onToggle, session, run, actions, onCopy
           }
         }}
       >
-        <Icon size={20} strokeWidth={1.5} className={styles.icon} />
+        <Icon size={20} strokeWidth={1.75} className={styles.icon} />
         <span className={styles.text}>
           <span className={styles.title}>{item.title}</span>
           <span className={styles.subtitle}>{location}</span>
@@ -300,7 +289,7 @@ function TagRow({ tag, notes, tree, open, onToggle, actions }: TagRowProps) {
   return (
     <li className={cx(styles.entry, open && styles.entryOpen)}>
       <button type="button" className={styles.row} aria-expanded={open} onClick={onToggle}>
-        <Tag size={20} strokeWidth={1.5} className={styles.icon} />
+        <Tag size={20} strokeWidth={1.75} className={styles.icon} />
         <span className={styles.text}>
           <span className={styles.title}>{tag.path}</span>
           <span className={styles.subtitle}>

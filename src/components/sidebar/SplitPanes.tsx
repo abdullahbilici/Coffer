@@ -23,7 +23,6 @@ type Layout = {
 const STORAGE_KEY = "coffer.sidebar.panes.v2";
 /** Smallest share of two neighbours either can be dragged to. */
 const MIN_SHARE = 0.12;
-const HEADER_PX = 26;
 
 /**
  * Collapsible, independently scrolling panes with draggable dividers, like the views in
@@ -63,9 +62,11 @@ export function SplitPanes({ panes }: { panes: Pane[] }) {
     setResizing(true);
 
     const total = weight(above) + weight(below);
-    const space = bottom.bottom - top.top - 2 * HEADER_PX;
+    // Header height is measured, not mirrored from the CSS.
+    const header = refs.current.get(above.id)?.querySelector("header")?.offsetHeight ?? 0;
+    const space = bottom.bottom - top.top - 2 * header;
     const move = (e: globalThis.PointerEvent) => {
-      const share = (e.clientY - top.top - HEADER_PX) / space;
+      const share = (e.clientY - top.top - header) / space;
       const clamped = Math.min(1 - MIN_SHARE, Math.max(MIN_SHARE, share));
       setLayout((l) => ({
         ...l,
@@ -131,7 +132,7 @@ function PaneView({ ref, pane, open, grow, onResize, onToggle }: PaneViewProps) 
       )}
       <header className={styles.header}>
         <button type="button" className={styles.toggle} aria-expanded={open} onClick={onToggle}>
-          <ChevronRight size={14} strokeWidth={2} className={styles.chevron} />
+          <ChevronRight size={14} strokeWidth={1.75} className={styles.chevron} />
           {pane.title}
         </button>
         {pane.actions && <span className={styles.actions}>{pane.actions}</span>}

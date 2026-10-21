@@ -26,9 +26,6 @@ import { Menu, type MenuAnchor } from "../ui/Menu";
 import { TreeRow } from "./TreeRow";
 import styles from "./Sidebar.module.css";
 
-/** The dragged pin's tilt; matches `.pinGhost` in Sidebar.module.css. */
-const LIFTED = "rotate(-1deg) scale(1.02)";
-
 /** Pointer travel before a press turns into a drag, so clicks still open the pin. */
 const DRAG_THRESHOLD_PX = 5;
 
@@ -65,52 +62,45 @@ export function PinnedList({ tree, selection, actions }: Props) {
   const ordered = optimistic
     ? [...tree.pins].sort((a, b) => optimistic.indexOf(pinKey(a)) - optimistic.indexOf(pinKey(b)))
     : tree.pins;
-  const pins = ordered.flatMap((pin): Resolved[] => {
-    const isSelected = (kind: string, id: number) =>
-      selection?.kind === kind && "id" in selection && selection.id === id;
+  const isSelected = (pin: PinRef) =>
+    selection?.kind === pin.kind && "id" in selection && selection.id === pin.id;
+  const resolve = (pin: PinRef): Omit<Resolved, "pin" | "selected"> | undefined => {
     if (pin.kind === "project") {
       const project = tree.projects.find((p) => p.id === pin.id);
-      return project
-        ? [
-            {
-              pin,
-              label: project.name,
-              icon: Box,
-              location: "",
-              open: () => actions.selectProject(project.id),
-              selected: isSelected("project", project.id),
-            },
-          ]
-        : [];
+      return (
+        project && {
+          label: project.name,
+          icon: Box,
+          location: "",
+          open: () => actions.selectProject(project.id),
+        }
+      );
     }
     if (pin.kind === "folder") {
       const folder = tree.folders.find((f) => f.id === pin.id);
-      return folder
-        ? [
-            {
-              pin,
-              label: folder.name,
-              icon: Folder,
-              location: projectName(folder.projectId),
-              open: () => actions.selectFolder(folder.id),
-              selected: isSelected("folder", folder.id),
-            },
-          ]
-        : [];
+      return (
+        folder && {
+          label: folder.name,
+          icon: Folder,
+          location: projectName(folder.projectId),
+          open: () => actions.selectFolder(folder.id),
+        }
+      );
     }
     const item = tree.items.find((i) => i.id === pin.id);
-    return item
-      ? [
-          {
-            pin,
-            label: item.title,
-            icon: itemIcon(item),
-            location: projectName(item.projectId),
-            open: () => actions.openItem(item),
-            selected: isSelected("item", item.id),
-          },
-        ]
-      : [];
+    return (
+      item && {
+        label: item.title,
+        icon: itemIcon(item),
+        location: projectName(item.projectId),
+        open: () => actions.openItem(item),
+      }
+    );
+  };
+  // Pins whose target was deleted simply drop out.
+  const pins = ordered.flatMap((pin): Resolved[] => {
+    const entry = resolve(pin);
+    return entry ? [{ ...entry, pin, selected: isSelected(pin) }] : [];
   });
 
   const order = pins.map((p) => pinKey(p.pin));
@@ -179,7 +169,7 @@ export function PinnedList({ tree, selection, actions }: Props) {
   const active = pins.find((p) => pinKey(p.pin) === dragging) ?? null;
 
   // The ghost glides into the slot while the real row stays hidden, then they swap.
-  const { glideMs, easing } = motion();
+  const { glideMs, easing, lifted } = motion();
   const dropAnimation: DropAnimation = {
     duration: glideMs,
     easing,
@@ -206,7 +196,7 @@ export function PinnedList({ tree, selection, actions }: Props) {
         params,
       );
       params.dragOverlay.node.firstElementChild?.animate(
-        [{ transform: LIFTED }, { transform: "none" }],
+        [{ transform: lifted }, { transform: "none" }],
         { duration: glideMs, easing, fill: "forwards" },
       );
       return restore;
