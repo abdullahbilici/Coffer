@@ -1,9 +1,37 @@
-.rootLabel {
-  display: block;
-  margin-bottom: var(--space-1);
-  padding: 1px 0;
+/* Path header with the actions, then a divider: the page's only title. */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.path {
+  min-width: 0;
+  margin: 0;
+  font-size: inherit;
+  user-select: text;
+}
+
+/* Subfolders and notes share one tray so the contents are clearly one block. */
+.contents {
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-subtle);
+}
+
+.contents > :last-child {
+  margin-bottom: 0;
+}
+
+.empty {
+  margin: 0;
+  padding: var(--space-3);
   color: var(--color-text-tertiary);
-  font-size: var(--text-sm);
+  text-align: center;
 }
 
 .overview {

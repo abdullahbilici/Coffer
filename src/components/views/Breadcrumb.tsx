@@ -1,37 +1,43 @@
 import { Fragment } from "react";
 import { ChevronRight } from "lucide-react";
-import type { VaultActions } from "../../app/actions";
-import type { Folder, ProjectSummary } from "../../lib/api";
+import { cx } from "../../lib/cx";
 import styles from "./Breadcrumb.module.css";
 
-type Props = {
-  project: ProjectSummary;
-  /** Folders from the project root down, each clickable. */
-  folders: Folder[];
-  actions: VaultActions;
+export type Crumb = {
+  key: string;
+  label: string;
+  /** Omit for the current place: it renders emphasised and isn't clickable. */
+  onClick?: () => void;
 };
 
-/** Clickable "Project > Folder > Sub" trail above a page title: navigates up the hierarchy. */
-export function Breadcrumb({ project, folders, actions }: Props) {
+type Props = {
+  crumbs: Crumb[];
+  /** `trail` sits above a title; `path` is the page header itself. */
+  variant?: "trail" | "path";
+};
+
+/** "Project > Folder > Sub" trail; each ancestor navigates up the hierarchy. */
+export function Breadcrumb({ crumbs, variant = "trail" }: Props) {
   return (
-    <nav className={styles.breadcrumb} aria-label="Location">
-      <button
-        type="button"
-        className={styles.crumb}
-        onClick={() => actions.selectProject(project.id)}
-      >
-        {project.name}
-      </button>
-      {folders.map((folder) => (
-        <Fragment key={folder.id}>
-          <ChevronRight size={12} strokeWidth={2} className={styles.separator} />
-          <button
-            type="button"
-            className={styles.crumb}
-            onClick={() => actions.selectFolder(folder.id)}
-          >
-            {folder.name}
-          </button>
+    <nav className={cx(styles.breadcrumb, styles[variant])} aria-label="Location">
+      {crumbs.map((crumb, i) => (
+        <Fragment key={crumb.key}>
+          {i > 0 && (
+            <ChevronRight
+              size={variant === "path" ? 16 : 12}
+              strokeWidth={2}
+              className={styles.separator}
+            />
+          )}
+          {crumb.onClick ? (
+            <button type="button" className={styles.crumb} onClick={crumb.onClick}>
+              {crumb.label}
+            </button>
+          ) : (
+            <span className={cx(styles.crumb, styles.current)} aria-current="page">
+              {crumb.label}
+            </span>
+          )}
         </Fragment>
       ))}
     </nav>

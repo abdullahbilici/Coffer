@@ -82,9 +82,18 @@ export function ItemView({ itemId, tree, session, run, actions, onSave, onCopy }
           <div>
             {project && (
               <Breadcrumb
-                project={project}
-                folders={folderPath(tree.folders, summary.folderId)}
-                actions={actions}
+                crumbs={[
+                  {
+                    key: `project:${project.id}`,
+                    label: project.name,
+                    onClick: () => actions.selectProject(project.id),
+                  },
+                  ...folderPath(tree.folders, summary.folderId).map((f) => ({
+                    key: `folder:${f.id}`,
+                    label: f.name,
+                    onClick: () => actions.selectFolder(f.id),
+                  })),
+                ]}
               />
             )}
             <h1 className={viewStyles.title}>

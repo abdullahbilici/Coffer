@@ -1,11 +1,11 @@
-import { Box, FilePlus, FolderOpen, FolderPlus, Pencil } from "lucide-react";
+import { FilePlus, FolderPlus, Pencil } from "lucide-react";
 import type { Run, VaultActions } from "../../app/actions";
 import type { Session } from "../../hooks/useSession";
 import type { Tree } from "../../lib/api";
 import { folderPath } from "../../lib/tree";
 import { itemIcon } from "../itemIcon";
 import { Button } from "../ui/Button";
-import { Breadcrumb } from "./Breadcrumb";
+import { Breadcrumb, type Crumb } from "./Breadcrumb";
 import { EntryList, type Entry } from "./EntryList";
 import { FolderGrid } from "./FolderGrid";
 import { ProjectOverview, useProjectOverview, type Overview } from "./ProjectOverview";
@@ -65,6 +65,20 @@ function Container({
       .join(", ");
   };
 
+  // The full path is the page header; the last crumb is where we are.
+  const crumbs: Crumb[] = [
+    {
+      key: `project:${project.id}`,
+      label: project.name,
+      onClick: folder ? () => actions.selectProject(project.id) : undefined,
+    },
+    ...path.map((f) => ({
+      key: `folder:${f.id}`,
+      label: f.name,
+      onClick: f.id === folder?.id ? undefined : () => actions.selectFolder(f.id),
+    })),
+  ];
+
   const entries: Entry[] = items.map((item) => ({
     key: `item:${item.id}`,
     icon: itemIcon(item),
@@ -77,22 +91,10 @@ function Container({
     <div className={viewStyles.view}>
       <div className={viewStyles.dragbar} data-tauri-drag-region />
       <div className={viewStyles.inner}>
-        <header className={viewStyles.header}>
-          <div>
-            {folder ? (
-              <Breadcrumb project={project} folders={path.slice(0, -1)} actions={actions} />
-            ) : (
-              <span className={styles.rootLabel}>Project</span>
-            )}
-            <h1 className={viewStyles.title}>
-              {folder ? (
-                <FolderOpen size={22} strokeWidth={1.75} className={viewStyles.titleIcon} />
-              ) : (
-                <Box size={22} strokeWidth={1.75} className={viewStyles.titleIcon} />
-              )}
-              {folder?.name ?? project.name}
-            </h1>
-          </div>
+        <header className={styles.header}>
+          <h1 className={styles.path}>
+            <Breadcrumb variant="path" crumbs={crumbs} />
+          </h1>
           <div className={viewStyles.actions}>
             {overview && overview.readme !== null && overview.draft === null && (
               <Button
@@ -125,16 +127,20 @@ function Container({
 
         {overview && <ProjectOverview overview={overview} />}
 
-        {subfolders.length > 0 && (
-          <FolderGrid
-            folders={subfolders}
-            describe={(f) => countIn(f.id)}
-            onOpen={(f) => actions.selectFolder(f.id)}
-          />
-        )}
-        {(entries.length > 0 || subfolders.length === 0) && (
-          <EntryList entries={entries} emptyText="Empty" onSelectTag={actions.selectTag} />
-        )}
+        {/* One tray for everything inside this project or folder, so it reads as its contents. */}
+        <section className={styles.contents} aria-label="Contents">
+          {subfolders.length > 0 && (
+            <FolderGrid
+              folders={subfolders}
+              describe={(f) => countIn(f.id)}
+              onOpen={(f) => actions.selectFolder(f.id)}
+            />
+          )}
+          {entries.length > 0 && (
+            <EntryList entries={entries} emptyText="" onSelectTag={actions.selectTag} />
+          )}
+          {entries.length === 0 && subfolders.length === 0 && <p className={styles.empty}>Empty</p>}
+        </section>
       </div>
     </div>
   );
