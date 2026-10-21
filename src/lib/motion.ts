@@ -9,6 +9,7 @@ export function motion() {
   return {
     baseMs: reduced ? 1 : ms("--duration-base"),
     slowMs: reduced ? 1 : ms("--duration-slow"),
+    glideMs: reduced ? 1 : ms("--duration-glide"),
     easing: css.getPropertyValue("--ease-out").trim() || "ease-out",
   };
 }

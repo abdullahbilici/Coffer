@@ -279,7 +279,7 @@ function PendingMove({ pending, onConfirm, onDone }: PendingProps) {
           { transform: "rotate(-1.5deg) scale(1.03)", opacity: 1 },
           { transform: end, opacity: 0 },
         ],
-        { duration: motion().slowMs, easing: motion().easing, fill: "forwards" },
+        { duration: motion().glideMs, easing: motion().easing, fill: "forwards" },
       )
       .finished.then(onDone, onDone);
   };

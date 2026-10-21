@@ -184,9 +184,9 @@ export function PinnedList({ tree, selection, actions }: Props) {
   const ghost = active ?? lastActive.current;
 
   // The ghost glides into the slot while the real row stays hidden, then they swap.
-  const { baseMs, easing } = motion();
+  const { glideMs, easing } = motion();
   const dropAnimation: DropAnimation = {
-    duration: baseMs,
+    duration: glideMs,
     easing,
     // Lifted surface melts into the row's own background as it lands.
     keyframes: ({ transform: { initial, final } }) => {
