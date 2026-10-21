@@ -85,6 +85,8 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* Reserve the scrollbar's width always, so rows don't shift when it appears. */
+  scrollbar-gutter: stable;
   padding-bottom: var(--space-2);
   transition: opacity var(--duration-slow) var(--ease-out);
 }
