@@ -5,21 +5,33 @@
   min-height: 0;
 }
 
-/* Height comes from flex-grow (set inline); basis 0 and the header as minimum mean grow 0 is
-   exactly a collapsed header. */
 .pane {
   position: relative;
   display: flex;
-  flex-basis: 0;
-  flex-shrink: 1;
   flex-direction: column;
   min-height: 26px;
   overflow: hidden;
+}
+
+/* The main pane takes the leftover height; flex-grow animates it shut. */
+.fill {
+  flex: 0 1 0;
   transition: flex-grow var(--duration-slow) var(--ease-out);
 }
 
+.fill.open {
+  flex-grow: 1;
+  min-height: 110px;
+}
+
+/* Other panes are as tall as their content, up to the inline max-height cap. */
+.sized {
+  flex: 0 1 auto;
+}
+
 /* Following the divider must be instant. */
-.resizing .pane {
+.resizing .pane,
+.resizing .bodyWrap {
   transition: none;
 }
 
@@ -81,8 +93,30 @@
   pointer-events: auto;
 }
 
-.body {
+/* 0fr -> 1fr opens the body to exactly its content height; in the fill pane it fills. */
+.bodyWrap {
+  display: grid;
   flex: 1;
+  grid-template-rows: 0fr;
+  min-height: 0;
+  transition: grid-template-rows var(--duration-slow) var(--ease-out);
+}
+
+.open .bodyWrap {
+  grid-template-rows: 1fr;
+}
+
+/* Content-sized panes keep some air below their last row, and never shrink to less than about
+   two rows, so each pane's boundary reads clearly even when it's nearly empty. */
+.sized .body {
+  padding-bottom: var(--space-4);
+}
+
+.sized.open .body {
+  min-height: 64px;
+}
+
+.body {
   min-height: 0;
   /* Always-present (transparent) scrollbar track, so rows never shift when content overflows.
      scrollbar-gutter misreserves space with WebKit's custom scrollbars. */

@@ -1,4 +1,4 @@
-import { useRef, useState, type PointerEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import { useStoredState } from "../../hooks/useStoredState";
 import { cx } from "../../lib/cx";
@@ -9,39 +9,50 @@ export type Pane = {
   title: string;
   /** Header buttons; shown on hover, like VS Code view actions. */
   actions?: ReactNode;
-  /** Relative size when the layout has never been resized. */
-  defaultWeight: number;
+  /**
+   * The main pane takes whatever height is left. Other panes are only as tall as their
+   * content, up to a cap, so a short or empty list never claims space it can't use.
+   */
+  fill?: boolean;
   children: ReactNode;
 };
 
 type Layout = {
   collapsed: string[];
-  /** Relative size of each pane while open. */
-  weights: Record<string, number>;
+  /** Height caps (px) the user dragged for content-sized panes. */
+  caps: Record<string, number>;
 };
 
-const STORAGE_KEY = "coffer.sidebar.panes.v2";
-/** Smallest share of two neighbours either can be dragged to. */
-const MIN_SHARE = 0.12;
+const STORAGE_KEY = "coffer.sidebar.panes.v3";
+/** Default cap for a content-sized pane, as a share of the sidebar's height. */
+const DEFAULT_CAP = 0.35;
+/** Smallest height a pane can be dragged to: its header plus a couple of rows. */
+const MIN_PANE_PX = 84;
 
 /**
- * Collapsible, independently scrolling panes with draggable dividers, like the views in
- * VS Code's sidebar.
- *
- * Panes are sized by `flex-grow` (0 = header only), which animates smoothly between states.
- * Content stays mounted while collapsed, so nothing re-renders or replays on open.
+ * Collapsible, independently scrolling panes like VS Code's sidebar views. Content-sized panes
+ * open and close by animating their body height; the fill pane animates its flex-grow. Content
+ * stays mounted while collapsed, so nothing re-renders or replays on open.
  */
 export function SplitPanes({ panes }: { panes: Pane[] }) {
-  const [layout, setLayout] = useStoredState<Layout>(STORAGE_KEY, { collapsed: [], weights: {} });
+  const [layout, setLayout] = useStoredState<Layout>(STORAGE_KEY, { collapsed: [], caps: {} });
   const [resizing, setResizing] = useState(false);
+  const [height, setHeight] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
   const refs = useRef(new Map<string, HTMLElement>());
 
+  // Caps scale with the sidebar, so track its height.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => setHeight(entry.contentRect.height));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   const isOpen = (pane: Pane) => !layout.collapsed.includes(pane.id);
-  const weight = (pane: Pane) => layout.weights[pane.id] ?? pane.defaultWeight;
-  // Open panes share all the free height: flex-grow values summing below 1 would leave a gap
-  // (a lone open pane at weight 0.5 fills only half), so they are normalised to sum to 1.
-  const openWeight = panes.filter(isOpen).reduce((sum, pane) => sum + weight(pane), 0);
-  const grow = (pane: Pane) => (isOpen(pane) && openWeight > 0 ? weight(pane) / openWeight : 0);
+  const capOf = (pane: Pane) =>
+    Math.min(layout.caps[pane.id] ?? height * DEFAULT_CAP, Math.max(height - MIN_PANE_PX, 0));
 
   const toggle = (id: string) =>
     setLayout((l) => ({
@@ -51,27 +62,23 @@ export function SplitPanes({ panes }: { panes: Pane[] }) {
         : [...l.collapsed, id],
     }));
 
-  /** Drags the border between `above` and `below`, trading weight between just those two. */
+  /**
+   * Drags the border between two open panes. The content-sized one of the pair gets a new cap;
+   * the fill pane simply takes the rest.
+   */
   const startResize = (above: Pane, below: Pane) => (event: PointerEvent<HTMLDivElement>) => {
-    const top = refs.current.get(above.id)?.getBoundingClientRect();
-    const bottom = refs.current.get(below.id)?.getBoundingClientRect();
-    if (!top || !bottom) return;
+    const sized = above.fill ? below : above;
+    const el = refs.current.get(sized.id);
+    if (!el) return;
     event.preventDefault();
     const handle = event.currentTarget;
     handle.setPointerCapture(event.pointerId);
     setResizing(true);
-
-    const total = weight(above) + weight(below);
-    // Header height is measured, not mirrored from the CSS.
-    const header = refs.current.get(above.id)?.querySelector("header")?.offsetHeight ?? 0;
-    const space = bottom.bottom - top.top - 2 * header;
+    const rect = el.getBoundingClientRect();
     const move = (e: globalThis.PointerEvent) => {
-      const share = (e.clientY - top.top - header) / space;
-      const clamped = Math.min(1 - MIN_SHARE, Math.max(MIN_SHARE, share));
-      setLayout((l) => ({
-        ...l,
-        weights: { ...l.weights, [above.id]: total * clamped, [below.id]: total * (1 - clamped) },
-      }));
+      const next = sized === above ? e.clientY - rect.top : rect.bottom - e.clientY;
+      const clamped = Math.max(MIN_PANE_PX, Math.min(next, height - MIN_PANE_PX));
+      setLayout((l) => ({ ...l, caps: { ...l.caps, [sized.id]: clamped } }));
     };
     const end = () => {
       setResizing(false);
@@ -85,7 +92,7 @@ export function SplitPanes({ panes }: { panes: Pane[] }) {
   };
 
   return (
-    <div className={cx(styles.container, resizing && styles.resizing)}>
+    <div ref={containerRef} className={cx(styles.container, resizing && styles.resizing)}>
       {panes.map((pane, i) => {
         const open = isOpen(pane);
         // A divider sits on this pane's top edge when it and the nearest open pane above are open.
@@ -99,7 +106,7 @@ export function SplitPanes({ panes }: { panes: Pane[] }) {
             }}
             pane={pane}
             open={open}
-            grow={grow(pane)}
+            cap={pane.fill ? undefined : capOf(pane)}
             onResize={above ? startResize(above, pane) : undefined}
             onToggle={() => toggle(pane.id)}
           />
@@ -113,15 +120,19 @@ type PaneViewProps = {
   ref: (el: HTMLElement | null) => void;
   pane: Pane;
   open: boolean;
-  /** Share of the free height; 0 leaves just the header. */
-  grow: number;
+  /** Max height of a content-sized pane; `undefined` for the fill pane. */
+  cap?: number;
   onResize?: (event: PointerEvent<HTMLDivElement>) => void;
   onToggle: () => void;
 };
 
-function PaneView({ ref, pane, open, grow, onResize, onToggle }: PaneViewProps) {
+function PaneView({ ref, pane, open, cap, onResize, onToggle }: PaneViewProps) {
   return (
-    <section ref={ref} className={cx(styles.pane, open && styles.open)} style={{ flexGrow: grow }}>
+    <section
+      ref={ref}
+      className={cx(styles.pane, pane.fill ? styles.fill : styles.sized, open && styles.open)}
+      style={cap === undefined ? undefined : { maxHeight: cap }}
+    >
       {onResize && (
         <div
           className={styles.divider}
@@ -137,9 +148,10 @@ function PaneView({ ref, pane, open, grow, onResize, onToggle }: PaneViewProps) 
         </button>
         {pane.actions && <span className={styles.actions}>{pane.actions}</span>}
       </header>
-      {/* `inert` keeps a collapsed pane's content out of focus and clicks. */}
-      <div className={styles.body} inert={!open}>
-        {pane.children}
+      {/* Grid rows animate between 0fr and 1fr, so the body opens to exactly its content.
+          `inert` keeps a collapsed pane's content out of focus and clicks. */}
+      <div className={styles.bodyWrap} inert={!open}>
+        <div className={styles.body}>{pane.children}</div>
       </div>
     </section>
   );

@@ -84,13 +84,12 @@ export function Sidebar(props: Props) {
           {
             id: "pinned",
             title: "Pinned",
-            defaultWeight: 0.22,
             children: <PinnedList tree={tree} selection={selection} actions={actions} />,
           },
           {
             id: "projects",
             title: "Projects",
-            defaultWeight: 0.53,
+            fill: true,
             actions: (
               <>
                 <CollapseAll section="projects" {...props} />
@@ -132,7 +131,6 @@ export function Sidebar(props: Props) {
           {
             id: "tags",
             title: "Tags",
-            defaultWeight: 0.25,
             actions: <CollapseAll section="tags" {...props} />,
             children:
               tagNodes.length > 0 ? (
