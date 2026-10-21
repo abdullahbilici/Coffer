@@ -1,4 +1,4 @@
-import { useState, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -14,6 +14,7 @@ import { Box, Folder, PinOff, type LucideIcon } from "lucide-react";
 import type { VaultActions } from "../../app/actions";
 import type { PinRef, Tree } from "../../lib/api";
 import { cx } from "../../lib/cx";
+import { motion } from "../../lib/motion";
 import { pinKey } from "../../lib/pins";
 import type { Selection } from "../../lib/selection";
 import { itemIcon } from "../itemIcon";
@@ -101,6 +102,36 @@ export function PinnedList({ tree, selection, actions }: Props) {
   });
 
   const order = pins.map((p) => pinKey(p.pin));
+
+  // Unpinned rows stay a moment at their old position and close (the reverse of rows growing
+  // in), whichever screen did the unpinning.
+  const [exiting, setExiting] = useState<{ entry: Resolved; index: number }[]>([]);
+  const previous = useRef<Resolved[]>(pins);
+  const orderKey = order.join(",");
+  useEffect(() => {
+    const current = new Set(orderKey.split(","));
+    const gone = previous.current
+      .map((entry, index) => ({ entry, index }))
+      .filter(({ entry }) => !current.has(pinKey(entry.pin)));
+    previous.current = pins;
+    if (gone.length === 0) return;
+    const keys = new Set(gone.map(({ entry }) => pinKey(entry.pin)));
+    setExiting((e) => [...e, ...gone]);
+    setTimeout(
+      () => setExiting((e) => e.filter(({ entry }) => !keys.has(pinKey(entry.pin)))),
+      motion().baseMs,
+    );
+    // `pins` is rebuilt every render; the key string is what actually changes.
+  }, [orderKey]);
+
+  const rows: { entry: Resolved; leaving: boolean }[] = pins.map((entry) => ({
+    entry,
+    leaving: false,
+  }));
+  for (const { entry, index } of exiting) {
+    if (order.includes(pinKey(entry.pin))) continue; // pinned again meanwhile
+    rows.splice(Math.min(index, rows.length), 0, { entry, leaving: true });
+  }
   const from = dragging === null ? -1 : order.indexOf(dragging);
   const to = over === null ? -1 : order.indexOf(over);
 
@@ -116,7 +147,7 @@ export function PinnedList({ tree, selection, actions }: Props) {
     actions.reorderPins(next);
   };
 
-  if (pins.length === 0) return <p className={styles.empty}>No pins</p>;
+  if (rows.length === 0) return <p className={styles.empty}>No pins</p>;
 
   const active = pins.find((p) => pinKey(p.pin) === dragging);
   return (
@@ -132,13 +163,18 @@ export function PinnedList({ tree, selection, actions }: Props) {
       }}
     >
       <div role="list">
-        {pins.map((entry, i) => (
+        {rows.map(({ entry, leaving }) => (
           <PinnedRow
             key={pinKey(entry.pin)}
             entry={entry}
+            leaving={leaving}
             // The insertion line shows on the side the row will land.
             insert={
-              i === to && from !== -1 && from !== to ? (from < to ? "after" : "before") : null
+              pinKey(entry.pin) === over && from !== -1 && from !== to
+                ? from < to
+                  ? "after"
+                  : "before"
+                : null
             }
             onMenu={(event) => {
               event.preventDefault();
@@ -172,12 +208,13 @@ export function PinnedList({ tree, selection, actions }: Props) {
 
 type RowProps = {
   entry: Resolved;
+  leaving: boolean;
   insert: "before" | "after" | null;
   onMenu: (event: MouseEvent) => void;
   onUnpin: () => void;
 };
 
-function PinnedRow({ entry, insert, onMenu, onUnpin }: RowProps) {
+function PinnedRow({ entry, leaving, insert, onMenu, onUnpin }: RowProps) {
   const id = pinKey(entry.pin);
   const draggable = useDraggable({ id });
   const droppable = useDroppable({ id });
@@ -199,7 +236,7 @@ function PinnedRow({ entry, insert, onMenu, onUnpin }: RowProps) {
           },
           handleProps: draggable.listeners,
           isDragging: draggable.isDragging,
-          leaving: false,
+          leaving,
         }}
         actions={<IconButton icon={PinOff} label="Unpin" size="sm" onClick={onUnpin} />}
       />

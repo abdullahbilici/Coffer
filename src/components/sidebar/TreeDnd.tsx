@@ -9,6 +9,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { cx } from "../../lib/cx";
+import { motion } from "../../lib/motion";
 import {
   DndContext,
   DragOverlay,
@@ -55,18 +56,6 @@ type DropData = {
 const DRAG_THRESHOLD_PX = 5;
 /** Hovering a collapsed project or folder this long opens it. */
 const EXPAND_DELAY_MS = 600;
-/** Motion tokens from tokens.css, for the Web Animations API. Reduced motion makes them instant. */
-function motion() {
-  const css = getComputedStyle(document.documentElement);
-  const ms = (name: string) => parseFloat(css.getPropertyValue(name)) || 0;
-  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  return {
-    sinkMs: reduced ? 1 : ms("--duration-slow"),
-    rowExitMs: reduced ? 1 : ms("--duration-base"),
-    easing: css.getPropertyValue("--ease-out").trim() || "ease-out",
-  };
-}
-
 type Rect = { left: number; top: number; width: number; height: number };
 
 /** A drop waiting for confirmation. The ghost stays where it was released. */
@@ -196,7 +185,7 @@ export function TreeDndProvider(props: ProviderProps) {
     const node = subjectNode(pending.subject);
     setLeaving(node);
     // Let the source row close before the tree reloads with the row in its new place.
-    void wait(motion().rowExitMs).then(() => {
+    void wait(motion().baseMs).then(() => {
       onMove(pending.subject, pending.drop.target);
       setLeaving((current) => (current === node ? null : current));
     });
@@ -290,7 +279,7 @@ function PendingMove({ pending, onConfirm, onDone }: PendingProps) {
           { transform: "rotate(-1.5deg) scale(1.03)", opacity: 1 },
           { transform: end, opacity: 0 },
         ],
-        { duration: motion().sinkMs, easing: motion().easing, fill: "forwards" },
+        { duration: motion().slowMs, easing: motion().easing, fill: "forwards" },
       )
       .finished.then(onDone, onDone);
   };
