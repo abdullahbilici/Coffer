@@ -1,0 +1,122 @@
+.container {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Height comes from flex-grow (set inline); basis 0 and the header as minimum mean grow 0 is
+   exactly a collapsed header. */
+.pane {
+  position: relative;
+  display: flex;
+  flex-basis: 0;
+  flex-shrink: 1;
+  flex-direction: column;
+  min-height: 26px;
+  overflow: hidden;
+  transition: flex-grow var(--duration-slow) var(--ease-out);
+}
+
+/* Following the divider must be instant. */
+.resizing .pane {
+  transition: none;
+}
+
+.pane + .pane {
+  border-top: 1px solid var(--color-border);
+}
+
+.header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  height: 26px;
+  padding-right: var(--space-2);
+}
+
+.toggle {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 2px;
+  height: 100%;
+  padding: 0 var(--space-2) 0 6px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  font-size: var(--text-xs);
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-align: left;
+  text-transform: uppercase;
+  transition: color var(--duration-fast) var(--ease-out);
+}
+
+.toggle:hover {
+  color: var(--color-text-secondary);
+}
+
+.chevron {
+  transition: transform var(--duration-slow) var(--ease-out);
+}
+
+.open .chevron {
+  transform: rotate(90deg);
+}
+
+/* View actions show while an open pane is hovered or focused, like VS Code. */
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.open:hover .actions,
+.open:focus-within .actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: var(--space-2);
+  transition: opacity var(--duration-slow) var(--ease-out);
+}
+
+.pane:not(.open) .body {
+  opacity: 0;
+}
+
+/* A thin hit area over the border between panes; the accent shows while hovering or dragging. */
+.divider {
+  position: absolute;
+  top: -3px;
+  right: 0;
+  left: 0;
+  z-index: 2;
+  height: 7px;
+  cursor: row-resize;
+}
+
+/* The visible line is 1px over the pane border; the hit area around it stays easy to grab. */
+.divider::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: transparent;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.divider:hover::after,
+.resizing .divider::after {
+  background: var(--color-accent);
+}

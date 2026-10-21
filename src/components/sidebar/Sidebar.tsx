@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { ChevronsDownUp, Plus, Search, X } from "lucide-react";
 import type { VaultActions } from "../../app/actions";
 import type { Session } from "../../hooks/useSession";
@@ -11,6 +11,7 @@ import { Kbd } from "../ui/Kbd";
 import { ProjectTree, type TreeEdit } from "./ProjectTree";
 import { SessionBar } from "./SessionBar";
 import { TagTree } from "./TagTree";
+import { SplitPanes } from "./SplitPanes";
 import { TreeDndProvider } from "./TreeDnd";
 import styles from "./Sidebar.module.css";
 
@@ -73,10 +74,11 @@ export function Sidebar(props: Props) {
         )}
       </div>
 
-      <div className={styles.scroll}>
-        <Section
-          title="Projects"
-          action={
+      <SplitPanes
+        top={{
+          id: "projects",
+          title: "Projects",
+          actions: (
             <>
               <CollapseAll section="projects" {...props} />
               <IconButton
@@ -86,46 +88,51 @@ export function Sidebar(props: Props) {
                 onClick={() => actions.guard(() => onEdit({ type: "createProject" }))}
               />
             </>
-          }
-        >
-          <TreeDndProvider
-            tree={tree}
-            expanded={expanded}
-            onExpand={onExpand}
-            onMove={(subject, { projectId, folderId }) =>
-              subject.kind === "item"
-                ? actions.moveItem(subject.id, projectId, folderId)
-                : actions.moveFolder(subject.id, projectId, folderId)
-            }
-          >
-            <ProjectTree
-              nodes={projectNodes}
+          ),
+          children: (
+            <TreeDndProvider
+              tree={tree}
               expanded={expanded}
-              selection={selection}
-              edit={edit}
-              onEdit={onEdit}
-              onToggle={onToggle}
               onExpand={onExpand}
-              actions={actions}
-            />
-          </TreeDndProvider>
-        </Section>
-
-        <Section title="Tags" action={<CollapseAll section="tags" {...props} />}>
-          {tagNodes.length > 0 ? (
-            <TagTree
-              nodes={tagNodes}
-              expanded={expanded}
-              selection={selection}
-              onToggle={onToggle}
-              onExpand={onExpand}
-              onSelect={actions.selectTag}
-            />
-          ) : (
-            <p className={styles.empty}>No tags</p>
-          )}
-        </Section>
-      </div>
+              authorize={props.session.ensureUnlocked}
+              onMove={(subject, { projectId, folderId }) =>
+                subject.kind === "item"
+                  ? actions.moveItem(subject.id, projectId, folderId)
+                  : actions.moveFolder(subject.id, projectId, folderId)
+              }
+            >
+              <ProjectTree
+                nodes={projectNodes}
+                expanded={expanded}
+                selection={selection}
+                edit={edit}
+                onEdit={onEdit}
+                onToggle={onToggle}
+                onExpand={onExpand}
+                actions={actions}
+              />
+            </TreeDndProvider>
+          ),
+        }}
+        bottom={{
+          id: "tags",
+          title: "Tags",
+          actions: <CollapseAll section="tags" {...props} />,
+          children:
+            tagNodes.length > 0 ? (
+              <TagTree
+                nodes={tagNodes}
+                expanded={expanded}
+                selection={selection}
+                onToggle={onToggle}
+                onExpand={onExpand}
+                onSelect={actions.selectTag}
+              />
+            ) : (
+              <p className={styles.empty}>No tags</p>
+            ),
+        }}
+      />
 
       <SessionBar session={props.session} onLock={props.onLock} />
     </aside>
@@ -140,25 +147,5 @@ function CollapseAll({ section, onCollapseAll }: Props & { section: TreeSection 
       size="sm"
       onClick={() => onCollapseAll(section)}
     />
-  );
-}
-
-function Section({
-  title,
-  action,
-  children,
-}: {
-  title: string;
-  action?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <section className={styles.section}>
-      <header className={styles.sectionHeader}>
-        <span>{title}</span>
-        <span className={styles.sectionActions}>{action}</span>
-      </header>
-      {children}
-    </section>
   );
 }

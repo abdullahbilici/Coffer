@@ -1,0 +1,29 @@
+.breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  /* Pull the first crumb's padding back so its text lines up with the title. */
+  margin: 0 0 var(--space-1) -4px;
+}
+
+.crumb {
+  padding: 1px 4px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  font-size: var(--text-sm);
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.crumb:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text);
+}
+
+.separator {
+  color: var(--color-text-tertiary);
+}

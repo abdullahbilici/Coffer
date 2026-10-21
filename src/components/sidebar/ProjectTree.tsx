@@ -105,7 +105,10 @@ function ProjectBranch({ node, ctx }: { node: ProjectNode; ctx: Context }) {
   const isOpen = expanded.has(key);
   const selected = selection?.kind === "project" && selection.id === project.id;
   const here = { projectId: project.id, folderId: null };
-  const dnd = useTreeNode({ id: key, drop: { target: here, expandKey: key } });
+  const dnd = useTreeNode({
+    id: key,
+    drop: { target: here, label: project.name, rowId: key, expandKey: key },
+  });
   const dropTarget = sameTarget(useTreeDnd().target, here);
 
   const newFolder = () => actions.startCreateFolder(project.id, null);
@@ -176,6 +179,7 @@ function ProjectBranch({ node, ctx }: { node: ProjectNode; ctx: Context }) {
           items={node.items}
           projectId={project.id}
           parentId={null}
+          container={{ rowId: key, label: project.name }}
           depth={1}
           ctx={ctx}
         />
@@ -189,12 +193,16 @@ type ChildrenProps = {
   items: ItemSummary[];
   projectId: number;
   parentId: number | null;
+  /** The project or folder row these children belong to; drops on an item land there. */
+  container: Container;
   depth: number;
   ctx: Context;
 };
 
-/** Items first, then folders. */
-function Children({ folders, items, projectId, parentId, depth, ctx }: ChildrenProps) {
+type Container = { rowId: string; label: string };
+
+/** Folders first (a new folder's name field on top), then items. */
+function Children({ folders, items, projectId, parentId, container, depth, ctx }: ChildrenProps) {
   const { edit, onEdit, actions } = ctx;
   const creatingHere =
     edit?.type === "createFolder" && edit.projectId === projectId && edit.parentId === parentId;
@@ -202,9 +210,6 @@ function Children({ folders, items, projectId, parentId, depth, ctx }: ChildrenP
 
   return (
     <>
-      {items.map((item) => (
-        <ItemRow key={item.id} item={item} depth={depth} ctx={ctx} />
-      ))}
       {creatingHere && (
         <TreeEditRow
           depth={depth}
@@ -219,6 +224,9 @@ function Children({ folders, items, projectId, parentId, depth, ctx }: ChildrenP
       )}
       {folders.map((node) => (
         <FolderBranch key={node.folder.id} node={node} depth={depth} ctx={ctx} />
+      ))}
+      {items.map((item) => (
+        <ItemRow key={item.id} item={item} container={container} depth={depth} ctx={ctx} />
       ))}
       {empty && (
         <p className={styles.emptyNested} style={{ paddingLeft: 30 + depth * 14 }}>
@@ -245,7 +253,7 @@ function FolderBranch({ node, depth, ctx }: { node: FolderNode; depth: number; c
       icon: Folder,
       from: { projectId: folder.projectId, folderId: folder.parentId },
     },
-    drop: { target: here, expandKey: key },
+    drop: { target: here, label: folder.name, rowId: key, expandKey: key },
   });
   const dropTarget = sameTarget(useTreeDnd().target, here);
 
@@ -317,6 +325,7 @@ function FolderBranch({ node, depth, ctx }: { node: FolderNode; depth: number; c
           items={node.items}
           projectId={folder.projectId}
           parentId={folder.id}
+          container={{ rowId: key, label: folder.name }}
           depth={depth + 1}
           ctx={ctx}
         />
@@ -325,14 +334,16 @@ function FolderBranch({ node, depth, ctx }: { node: FolderNode; depth: number; c
   );
 }
 
-function ItemRow({ item, depth, ctx }: { item: ItemSummary; depth: number; ctx: Context }) {
+type ItemRowProps = { item: ItemSummary; container: Container; depth: number; ctx: Context };
+
+function ItemRow({ item, container, depth, ctx }: ItemRowProps) {
   const { selection, actions, openMenu } = ctx;
   const parent = { projectId: item.projectId, folderId: item.folderId };
   // Dropping onto an item lands in the item's folder, so the whole open folder is a target.
   const dnd = useTreeNode({
     id: `item:${item.id}`,
     subject: { kind: "item", id: item.id, label: item.title, icon: itemIcon(item), from: parent },
-    drop: { target: parent },
+    drop: { target: parent, ...container },
   });
   const menuItems: MenuItem[] = [
     { label: "Duplicate", icon: CopyPlus, onSelect: () => actions.duplicateItem(item.id) },

@@ -1,5 +1,6 @@
 .row {
   position: relative;
+  overflow: hidden;
   animation: row-in var(--duration-base) var(--ease-out);
   transition:
     background var(--duration-fast) var(--ease-out),
@@ -44,6 +45,7 @@
 
 .editing,
 .editing:hover {
+  overflow: visible;
   background: transparent;
 }
 
@@ -79,10 +81,24 @@
   transition: color var(--duration-fast) var(--ease-out);
 }
 
+/* Rows open from zero height and a moved row closes back to it, so neighbours slide. */
 @keyframes row-in {
   from {
+    height: 0;
     opacity: 0;
-    transform: translateY(-3px);
+  }
+}
+
+.leaving {
+  overflow: hidden;
+  pointer-events: none;
+  animation: row-out var(--duration-base) var(--ease-in) forwards;
+}
+
+@keyframes row-out {
+  to {
+    height: 0;
+    opacity: 0;
   }
 }
 
@@ -120,7 +136,8 @@
   display: flex;
 }
 
-.row:hover .trailing {
+/* Hover actions take the trailing slot; rows without actions (tags) keep their count. */
+.row:has(.actions):hover .trailing {
   display: none;
 }
 

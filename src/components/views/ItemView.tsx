@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { Box, CopyPlus, KeyRound, Pencil, Trash2 } from "lucide-react";
+import { CopyPlus, KeyRound, Pencil, Trash2 } from "lucide-react";
 import type { Run, VaultActions } from "../../app/actions";
 import type { Session } from "../../hooks/useSession";
 import { api, type Item, type SaveItemInput, type Tree } from "../../lib/api";
-import { locationLabel } from "../../lib/tree";
+import { folderPath } from "../../lib/tree";
 import { Button } from "../ui/Button";
+import { Breadcrumb } from "./Breadcrumb";
 import { ItemBody } from "./ItemBody";
 import { ItemEditor } from "./ItemEditor";
 import { TagList } from "./TagList";
@@ -37,6 +38,7 @@ export function ItemView({ itemId, tree, session, run, actions, onSave, onCopy }
   }, [itemId, version, run]);
 
   if (!item || !summary) return null;
+  const project = tree.projects.find((p) => p.id === summary.projectId);
 
   const startEdit = () =>
     run(async () => {
@@ -78,10 +80,13 @@ export function ItemView({ itemId, tree, session, run, actions, onSave, onCopy }
       <div className={viewStyles.inner}>
         <header className={viewStyles.header}>
           <div>
-            <div className={viewStyles.eyebrow}>
-              <Box size={14} strokeWidth={1.75} />
-              {locationLabel(tree, summary)}
-            </div>
+            {project && (
+              <Breadcrumb
+                project={project}
+                folders={folderPath(tree.folders, summary.folderId)}
+                actions={actions}
+              />
+            )}
             <h1 className={viewStyles.title}>
               {item.secure && (
                 <KeyRound size={20} strokeWidth={1.75} className={viewStyles.titleIcon} />

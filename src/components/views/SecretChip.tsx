@@ -37,7 +37,7 @@ export function SecretChip({ value, shown, onToggle, onCopy, className }: Props)
           {value}
         </button>
       ) : (
-        <button type="button" className={styles.action} aria-label="Copy" onClick={onCopy}>
+        <button type="button" className={styles.copy} aria-label="Copy" onClick={onCopy}>
           <Copy size={13} strokeWidth={2} />
         </button>
       )}

@@ -31,13 +31,6 @@
   color: var(--color-accent);
 }
 
-.copyable:active,
-.value:active {
-  background: var(--color-accent);
-  color: var(--color-accent-contrast);
-  transition-duration: 0ms;
-}
-
 .secret {
   margin-left: -3px;
   padding: 0 2px;
@@ -45,7 +38,8 @@
   transition: background var(--duration-base) var(--ease-out);
 }
 
-.action {
+/* Every copy target shares one look: accent tint on hover, solid accent while pressed. */
+.copy {
   display: grid;
   place-items: center;
   flex-shrink: 0;
@@ -60,9 +54,9 @@
     color var(--duration-fast) var(--ease-out);
 }
 
-.action:hover {
-  background: var(--color-bg-hover);
-  color: var(--color-text);
+.copy:hover {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
 }
 
 /* Re-keyed on every toggle so the icon crossfades instead of snapping. */
@@ -130,4 +124,14 @@
     opacity: 0;
     transform: scale(0.7);
   }
+}
+
+/* Last on purpose: the pressed state must win over every :hover rule above. */
+.copyable:active,
+.value:active,
+.copy:active {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  transition-duration: 0ms;
 }

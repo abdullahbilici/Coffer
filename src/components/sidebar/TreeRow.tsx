@@ -47,11 +47,13 @@ export function TreeRow({
       aria-expanded={expanded}
       aria-selected={selected}
       ref={dnd?.ref}
+      data-tree-node={dnd?.id}
       {...dnd?.handleProps}
       className={cx(
         styles.row,
         selected && styles.selected,
         dnd?.isDragging && styles.dragging,
+        dnd?.leaving && styles.leaving,
         dropTarget && styles.dropTarget,
       )}
       style={{ paddingLeft: 8 + depth * INDENT_PX }}

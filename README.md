@@ -55,6 +55,7 @@ A stable signature means macOS only asks once for Keychain access.
 | Make selection copyable | Cmd+E |
 | Make selection secret | Cmd+P |
 | Jump out of a chip while typing | Tab |
+| Back / forward | Cmd+[ / Cmd+], or Cmd+Left / Cmd+Right |
 | Close the current view | Esc |
 
 Right-click any project, folder or note for more actions.

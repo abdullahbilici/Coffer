@@ -1,11 +1,11 @@
-import { Fragment } from "react";
-import { Box, ChevronRight, FilePlus, Folder, FolderOpen, FolderPlus, Pencil } from "lucide-react";
+import { Box, FilePlus, Folder, FolderOpen, FolderPlus, Pencil } from "lucide-react";
 import type { Run, VaultActions } from "../../app/actions";
 import type { Session } from "../../hooks/useSession";
 import type { Tree } from "../../lib/api";
 import { folderPath } from "../../lib/tree";
 import { itemIcon } from "../itemIcon";
 import { Button } from "../ui/Button";
+import { Breadcrumb } from "./Breadcrumb";
 import { EntryList, type Entry } from "./EntryList";
 import { ProjectOverview, useProjectOverview, type Overview } from "./ProjectOverview";
 import styles from "./ContainerView.module.css";
@@ -24,7 +24,7 @@ type Props = {
 
 /**
  * A project or folder: breadcrumb, then for a project root its markdown overview, then its
- * items and subfolders (items first).
+ * subfolders and items (folders first).
  */
 export function ContainerView(props: Props) {
   return props.folderId === null ? (
@@ -65,19 +65,19 @@ function Container({
   };
 
   const entries: Entry[] = [
-    ...items.map((item) => ({
-      key: `item:${item.id}`,
-      icon: itemIcon(item),
-      title: item.title,
-      tags: item.tags,
-      onOpen: () => actions.openItem(item),
-    })),
     ...subfolders.map((sub) => ({
       key: `folder:${sub.id}`,
       icon: Folder,
       title: sub.name,
       subtitle: countIn(sub.id),
       onOpen: () => actions.selectFolder(sub.id),
+    })),
+    ...items.map((item) => ({
+      key: `item:${item.id}`,
+      icon: itemIcon(item),
+      title: item.title,
+      tags: item.tags,
+      onOpen: () => actions.openItem(item),
     })),
   ];
 
@@ -87,24 +87,11 @@ function Container({
       <div className={viewStyles.inner}>
         <header className={viewStyles.header}>
           <div>
-            <nav className={styles.breadcrumb}>
-              {folder ? (
-                <>
-                  <Crumb label={project.name} onClick={() => actions.selectProject(project.id)} />
-                  {path.slice(0, -1).map((ancestor) => (
-                    <Fragment key={ancestor.id}>
-                      <ChevronRight size={12} strokeWidth={2} className={styles.separator} />
-                      <Crumb
-                        label={ancestor.name}
-                        onClick={() => actions.selectFolder(ancestor.id)}
-                      />
-                    </Fragment>
-                  ))}
-                </>
-              ) : (
-                <span className={styles.rootLabel}>Project</span>
-              )}
-            </nav>
+            {folder ? (
+              <Breadcrumb project={project} folders={path.slice(0, -1)} actions={actions} />
+            ) : (
+              <span className={styles.rootLabel}>Project</span>
+            )}
             <h1 className={viewStyles.title}>
               {folder ? (
                 <FolderOpen size={22} strokeWidth={1.75} className={viewStyles.titleIcon} />
@@ -154,12 +141,4 @@ function Container({
 
 function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
-}
-
-function Crumb({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button type="button" className={styles.crumb} onClick={onClick}>
-      {label}
-    </button>
-  );
 }

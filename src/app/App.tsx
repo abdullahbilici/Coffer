@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Tag } from "lucide-react";
+import { ChevronLeft, ChevronRight, Tag } from "lucide-react";
 import type { TreeEdit } from "../components/sidebar/ProjectTree";
 import { Sidebar } from "../components/sidebar/Sidebar";
+import { IconButton } from "../components/ui/IconButton";
 import { Toast } from "../components/ui/Toast";
 import { ContainerView } from "../components/views/ContainerView";
 import { EmptyView } from "../components/views/EmptyView";
@@ -10,6 +11,7 @@ import { ItemListView } from "../components/views/ItemListView";
 import { ItemView } from "../components/views/ItemView";
 import { LockScreen } from "../components/views/LockScreen";
 import { SearchView } from "../components/views/SearchView";
+import { useHistory, type Place } from "../hooks/useHistory";
 import { useSession } from "../hooks/useSession";
 import { useToast } from "../hooks/useToast";
 import { useVault } from "../hooks/useVault";
@@ -56,7 +58,7 @@ export function App() {
       if (event.key !== "Escape" || event.defaultPrevented) return;
       const target = event.target as HTMLElement;
       if (target.closest("input, textarea, select, [contenteditable]")) return;
-      setSelection(null);
+      selectRef.current(null);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -86,9 +88,76 @@ export function App() {
     setExpanded((prev) => (keys.every((k) => prev.has(k)) ? prev : new Set([...prev, ...keys])));
   }, []);
 
-  const select = useCallback((next: Selection) => {
-    setSelection(next);
-    setQuery("");
+  // Back/forward history. Going back to a search restores its results.
+  const treeRef = useRef(tree);
+  treeRef.current = tree;
+  const placeExists = useCallback((place: Place) => {
+    const t = treeRef.current;
+    const s = place.selection;
+    if (!t || !s) return true;
+    switch (s.kind) {
+      case "project":
+        return t.projects.some((p) => p.id === s.id);
+      case "folder":
+        return t.folders.some((f) => f.id === s.id);
+      case "item":
+        return t.items.some((i) => i.id === s.id);
+      case "tag":
+        return t.items.some((i) => hasTag(i, s.path));
+      case "newItem":
+        return false;
+    }
+  }, []);
+  const history = useHistory((place) => {
+    setSelection(place.selection);
+    setQuery(place.query);
+  }, placeExists);
+  const { record } = history;
+
+  const select = useCallback(
+    (next: Selection) => {
+      record({ selection, query }, { selection: next, query: "" });
+      setSelection(next);
+      setQuery("");
+    },
+    [record, selection, query],
+  );
+  const selectRef = useRef(select);
+  selectRef.current = select;
+
+  const here: Place = { selection, query };
+  const goBack = () => history.back(here);
+  const goForward = () => history.forward(here);
+  const navRef = useRef({ goBack, goForward });
+  navRef.current = { goBack, goForward };
+
+  // Cmd+[ / Cmd+] by physical key (Cmd+Ğ / Cmd+Ü on a Turkish keyboard), Cmd+arrows outside
+  // text fields, and the mouse's back/forward buttons.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!event.metaKey || event.altKey || event.ctrlKey || event.shiftKey) return;
+      const editing = (event.target as HTMLElement).closest(
+        "input, textarea, select, [contenteditable]",
+      );
+      if (editing) return;
+      if (event.code === "BracketLeft" || event.key === "ArrowLeft") {
+        event.preventDefault();
+        navRef.current.goBack();
+      } else if (event.code === "BracketRight" || event.key === "ArrowRight") {
+        event.preventDefault();
+        navRef.current.goForward();
+      }
+    };
+    const onMouseUp = (event: MouseEvent) => {
+      if (event.button === 3) navRef.current.goBack();
+      if (event.button === 4) navRef.current.goForward();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
   }, []);
 
   /** Expands a project and the folders down to `folderId` so that location is visible. */
@@ -327,7 +396,23 @@ export function App() {
         onLock={() => run(session.lock)}
         actions={actions}
       />
-      <main className={styles.main}>{renderMain()}</main>
+      <main className={styles.main}>
+        <nav className={styles.history} aria-label="History">
+          <IconButton
+            icon={ChevronLeft}
+            label="Back"
+            disabled={!history.canBack}
+            onClick={goBack}
+          />
+          <IconButton
+            icon={ChevronRight}
+            label="Forward"
+            disabled={!history.canForward}
+            onClick={goForward}
+          />
+        </nav>
+        {renderMain()}
+      </main>
       <Toast toast={toast.toast} onDismiss={toast.dismiss} />
     </div>
   );

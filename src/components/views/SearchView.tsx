@@ -6,12 +6,14 @@ import {
   ChevronRight,
   FileText,
   Folder,
+  Tag,
   type LucideIcon,
 } from "lucide-react";
 import type { Run, VaultActions } from "../../app/actions";
 import type { Session } from "../../hooks/useSession";
 import { api, type Item, type ItemSummary, type Tree } from "../../lib/api";
 import { cx } from "../../lib/cx";
+import { buildTagTree, hasTag, type TagNode } from "../../lib/tags";
 import { folderPath, locationLabel } from "../../lib/tree";
 import { itemIcon } from "../itemIcon";
 import { Button } from "../ui/Button";
@@ -20,12 +22,13 @@ import { TagList } from "./TagList";
 import styles from "./SearchView.module.css";
 import viewStyles from "./View.module.css";
 
-type Kind = "note" | "project" | "folder";
+type Kind = "note" | "project" | "folder" | "tag";
 
 const KINDS: { kind: Kind; label: string; icon: LucideIcon }[] = [
   { kind: "note", label: "Notes", icon: FileText },
   { kind: "project", label: "Projects", icon: Box },
   { kind: "folder", label: "Folders", icon: Folder },
+  { kind: "tag", label: "Tags", icon: Tag },
 ];
 
 type Props = {
@@ -37,13 +40,28 @@ type Props = {
   onCopy: (text: string) => Promise<void>;
 };
 
+/** Every tag path, parents included (`env` and `env/prod`). */
+function allTags(nodes: TagNode[]): TagNode[] {
+  return nodes.flatMap((node) => [node, ...allTags(node.children)]);
+}
+
+/** Drops tags whose parent also matched: "ai" lists `ai`, whose notes cover `ai/openai` too. */
+function topmost(tags: TagNode[]): TagNode[] {
+  const paths = new Set(tags.map((t) => t.path));
+  return tags.filter((t) => {
+    const segments = t.path.split("/");
+    return !segments.slice(0, -1).some((_, i) => paths.has(segments.slice(0, i + 1).join("/")));
+  });
+}
+
 /**
- * Search across notes, projects and folders. Notes expand in place so results stay on screen;
- * projects and folders navigate.
+ * Search across notes, projects, folders and tags. Notes and tags expand in place so results
+ * stay on screen; projects and folders navigate.
  */
 export function SearchView({ query, tree, session, run, actions, onCopy }: Props) {
   const [kinds, setKinds] = useState<ReadonlySet<Kind>>(() => new Set(KINDS.map((k) => k.kind)));
-  const [open, setOpen] = useState<ReadonlySet<number>>(() => new Set());
+  /** Expanded rows, keyed `note:<id>` or `tag:<path>`. */
+  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
 
   const q = query.trim().toLowerCase();
   const matches = (text: string) => text.toLowerCase().includes(q);
@@ -52,6 +70,7 @@ export function SearchView({ query, tree, session, run, actions, onCopy }: Props
     project: tree.projects.filter((p) => matches(p.name)),
     folder: tree.folders.filter((f) => matches(f.name)),
     note: tree.items.filter((i) => matches(i.title) || i.tags.some(matches)),
+    tag: topmost(allTags(buildTagTree(tree.items)).filter((t) => matches(t.path))),
   };
 
   const toggle = <T,>(set: ReadonlySet<T>, value: T) => {
@@ -129,12 +148,24 @@ export function SearchView({ query, tree, session, run, actions, onCopy }: Props
                   key={`note:${item.id}`}
                   item={item}
                   location={locationLabel(tree, item)}
-                  open={open.has(item.id)}
-                  onToggle={() => setOpen((o) => toggle(o, item.id))}
+                  open={open.has(`note:${item.id}`)}
+                  onToggle={() => setOpen((o) => toggle(o, `note:${item.id}`))}
                   session={session}
                   run={run}
                   actions={actions}
                   onCopy={onCopy}
+                />
+              ))}
+            {kinds.has("tag") &&
+              results.tag.map((tag) => (
+                <TagRow
+                  key={`tag:${tag.path}`}
+                  tag={tag}
+                  notes={tree.items.filter((i) => hasTag(i, tag.path))}
+                  tree={tree}
+                  open={open.has(`tag:${tag.path}`)}
+                  onToggle={() => setOpen((o) => toggle(o, `tag:${tag.path}`))}
+                  actions={actions}
                 />
               ))}
           </ul>
@@ -252,5 +283,66 @@ function NotePreview({ itemId, version, session, run, onCopy, onGoTo }: PreviewP
         </Button>
       </div>
     </div>
+  );
+}
+
+type TagRowProps = {
+  tag: TagNode;
+  notes: ItemSummary[];
+  tree: Tree;
+  open: boolean;
+  onToggle: () => void;
+  actions: VaultActions;
+};
+
+/** A tag that expands into the notes carrying it (or a tag nested below it). */
+function TagRow({ tag, notes, tree, open, onToggle, actions }: TagRowProps) {
+  return (
+    <li className={cx(styles.entry, open && styles.entryOpen)}>
+      <button type="button" className={styles.row} aria-expanded={open} onClick={onToggle}>
+        <Tag size={20} strokeWidth={1.5} className={styles.icon} />
+        <span className={styles.text}>
+          <span className={styles.title}>{tag.path}</span>
+          <span className={styles.subtitle}>
+            {tag.count} {tag.count === 1 ? "note" : "notes"}
+          </span>
+        </span>
+        <ChevronDown size={16} strokeWidth={1.75} className={cx(styles.trail, styles.chevron)} />
+      </button>
+      <div className={styles.panel}>
+        <div className={styles.panelInner}>
+          <div className={cx(styles.preview, styles.tagPreview)}>
+            <ul className={styles.tagNotes}>
+              {notes.map((note) => {
+                const Icon = itemIcon(note);
+                return (
+                  <li key={note.id}>
+                    <button
+                      type="button"
+                      className={styles.tagNote}
+                      onClick={() => actions.openItem(note)}
+                    >
+                      <Icon size={16} strokeWidth={1.75} className={styles.icon} />
+                      <span className={styles.title}>{note.title}</span>
+                      <span className={styles.subtitle}>{locationLabel(tree, note)}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            <div className={styles.previewFooter}>
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={ArrowRight}
+                onClick={() => actions.selectTag(tag.path)}
+              >
+                Open tag
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </li>
   );
 }
