@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, isLocked, type SessionInfo } from "../lib/api";
-import { useNow } from "./useNow";
 
 export type Session = ReturnType<typeof useSession>;
 
@@ -11,13 +10,22 @@ const SESSION_CHANGED = "session-changed";
 /**
  * Tracks the Touch ID unlock window. Revealed secrets are not cached here: each view fetches
  * them on demand and drops them when it unmounts or the window closes.
+ *
+ * Nothing here ticks: `unlocked` flips with one timer at the window's end, and the returned
+ * object only changes when the session does, so it doesn't re-render the app every second.
+ * The live countdown lives in `SessionBar`.
  */
 export function useSession() {
   const [info, setInfo] = useState<SessionInfo>({ entered: false, expiresAt: null });
-  const now = useNow();
+  const [unlocked, setUnlocked] = useState(false);
 
-  const unlocked = info.expiresAt !== null && info.expiresAt > now;
-  const remainingMs = unlocked ? info.expiresAt! - now : 0;
+  useEffect(() => {
+    const remaining = info.expiresAt === null ? 0 : info.expiresAt - Date.now();
+    setUnlocked(remaining > 0);
+    if (remaining <= 0) return;
+    const timer = setTimeout(() => setUnlocked(false), remaining);
+    return () => clearTimeout(timer);
+  }, [info.expiresAt]);
 
   // The backend closes the window on its own when the screen locks or the Mac sleeps.
   useEffect(() => {
@@ -52,5 +60,16 @@ export function useSession() {
     if (info.expiresAt === null || info.expiresAt <= Date.now()) await unlock();
   }, [info.expiresAt, unlock]);
 
-  return { entered: info.entered, unlocked, remainingMs, unlock, lock, withUnlock, ensureUnlocked };
+  return useMemo(
+    () => ({
+      entered: info.entered,
+      unlocked,
+      expiresAt: info.expiresAt,
+      unlock,
+      lock,
+      withUnlock,
+      ensureUnlocked,
+    }),
+    [info.entered, info.expiresAt, unlocked, unlock, lock, withUnlock, ensureUnlocked],
+  );
 }
