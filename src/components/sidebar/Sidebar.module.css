@@ -117,3 +117,27 @@
 .after::after {
   bottom: -1px;
 }
+
+/* Dragged pin: the row itself, lifted. Landing flattens it to match the real row. */
+.pinGhost {
+  border-radius: var(--radius-md);
+  background: var(--color-bg-elevated);
+  box-shadow: var(--shadow-popover);
+  transform: rotate(-1deg) scale(1.02);
+  transition:
+    transform var(--duration-base) var(--ease-out),
+    box-shadow var(--duration-base) var(--ease-out),
+    background var(--duration-base) var(--ease-out);
+}
+
+/* The overlay is exactly the row's size; the row's own side margins would overflow it. */
+.pinGhost > div {
+  margin: 0;
+  animation: none;
+}
+
+.landing {
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}

@@ -8,7 +8,9 @@ import {
   useDroppable,
   useSensor,
   useSensors,
+  defaultDropAnimationSideEffects,
   type DragEndEvent,
+  type DropAnimation,
 } from "@dnd-kit/core";
 import { Box, Folder, PinOff, type LucideIcon } from "lucide-react";
 import type { VaultActions } from "../../app/actions";
@@ -22,7 +24,6 @@ import { IconButton } from "../ui/IconButton";
 import { Menu, type MenuAnchor } from "../ui/Menu";
 import { TreeRow } from "./TreeRow";
 import styles from "./Sidebar.module.css";
-import dndStyles from "./TreeDnd.module.css";
 
 /** Pointer travel before a press turns into a drag, so clicks still open the pin. */
 const DRAG_THRESHOLD_PX = 5;
@@ -156,7 +157,19 @@ export function PinnedList({ tree, selection, actions }: Props) {
 
   if (rows.length === 0) return <p className={styles.empty}>No pins</p>;
 
-  const active = pins.find((p) => pinKey(p.pin) === dragging);
+  // The overlay keeps showing the last dragged pin while it lands.
+  const lastActive = useRef<Resolved | null>(null);
+  const active = pins.find((p) => pinKey(p.pin) === dragging) ?? null;
+  if (active) lastActive.current = active;
+  const ghost = active ?? lastActive.current;
+
+  // The ghost glides into the slot while the real row stays hidden, then they swap.
+  const { baseMs, easing } = motion();
+  const dropAnimation: DropAnimation = {
+    duration: baseMs,
+    easing,
+    sideEffects: defaultDropAnimationSideEffects({ styles: { active: { opacity: "0" } } }),
+  };
   return (
     <DndContext
       sensors={sensors}
@@ -192,11 +205,18 @@ export function PinnedList({ tree, selection, actions }: Props) {
           />
         ))}
       </div>
-      <DragOverlay>
-        {active && (
-          <div className={dndStyles.ghost}>
-            <active.icon size={16} strokeWidth={1.75} className={dndStyles.ghostIcon} />
-            <span className={dndStyles.ghostLabel}>{active.label}</span>
+      <DragOverlay dropAnimation={dropAnimation}>
+        {ghost && (
+          // A copy of the row itself: lifted while dragging, flat again as it lands, so it
+          // matches the real row exactly when they swap.
+          <div className={cx(styles.pinGhost, !active && styles.landing)}>
+            <TreeRow
+              depth={0}
+              icon={ghost.icon}
+              label={ghost.label}
+              selected={ghost.selected}
+              trailing={ghost.location || undefined}
+            />
           </div>
         )}
       </DragOverlay>
