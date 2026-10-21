@@ -131,13 +131,16 @@ export function PinnedList({ tree, selection, actions }: Props) {
   // in), whichever screen did the unpinning.
   const [exiting, setExiting] = useState<{ entry: Resolved; index: number }[]>([]);
   const previous = useRef<Resolved[]>(pins);
+  // `pins` is rebuilt every render; read the latest through a ref and react to the key string.
+  const latest = useRef(pins);
+  latest.current = pins;
   const orderKey = order.join(",");
   useEffect(() => {
     const current = new Set(orderKey.split(","));
     const gone = previous.current
       .map((entry, index) => ({ entry, index }))
       .filter(({ entry }) => !current.has(pinKey(entry.pin)));
-    previous.current = pins;
+    previous.current = latest.current;
     if (gone.length === 0) return;
     const keys = new Set(gone.map(({ entry }) => pinKey(entry.pin)));
     setExiting((e) => [...e, ...gone]);
@@ -145,7 +148,12 @@ export function PinnedList({ tree, selection, actions }: Props) {
       () => setExiting((e) => e.filter(({ entry }) => !keys.has(pinKey(entry.pin)))),
       motion().baseMs,
     );
-    // `pins` is rebuilt every render; the key string is what actually changes.
+  }, [orderKey]);
+
+  // Only rows that are new to the list grow in; rows that just moved stay put.
+  const seen = useRef(new Set<string>());
+  useEffect(() => {
+    seen.current = new Set(orderKey.split(","));
   }, [orderKey]);
 
   const rows: { entry: Resolved; leaving: boolean }[] = pins.map((entry) => ({
@@ -217,11 +225,6 @@ export function PinnedList({ tree, selection, actions }: Props) {
     },
   };
 
-  // Only rows that are new to the list grow in; rows that just moved stay put.
-  const seen = useRef(new Set<string>());
-  useEffect(() => {
-    seen.current = new Set(order);
-  });
   return (
     <DndContext
       sensors={sensors}

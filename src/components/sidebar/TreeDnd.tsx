@@ -248,6 +248,8 @@ function PendingMove({ pending, onConfirm, onDone }: PendingProps) {
 
   const row = document.querySelector(`[data-tree-node="${pending.drop.rowId}"]`);
   const destination = row ? toRect(row.getBoundingClientRect()) : pending.ghost;
+  // Where the destination was when the confirmation opened; the popover stays put after that.
+  const [anchor] = useState(destination);
 
   // Below the destination row, kept inside the window.
   useLayoutEffect(() => {
@@ -255,14 +257,10 @@ function PendingMove({ pending, onConfirm, onDone }: PendingProps) {
     if (!box) return;
     const margin = 8;
     setPosition({
-      left: Math.min(destination.left + 8, window.innerWidth - box.width - margin),
-      top: Math.min(
-        destination.top + destination.height + 6,
-        window.innerHeight - box.height - margin,
-      ),
+      left: Math.min(anchor.left + 8, window.innerWidth - box.width - margin),
+      top: Math.min(anchor.top + anchor.height + 6, window.innerHeight - box.height - margin),
     });
-    // Measured once, when the confirmation opens.
-  }, []);
+  }, [anchor]);
 
   const lifted = "rotate(-1.5deg) scale(1.03)";
 
