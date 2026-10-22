@@ -2,6 +2,8 @@ pub mod folders;
 pub mod items;
 pub mod pins;
 pub mod projects;
+pub mod settings;
+pub mod vault;
 
 use std::path::Path;
 
@@ -78,6 +80,15 @@ const MIGRATIONS: &[Migration] = &[
     ALTER TABLE projects ADD COLUMN pin_order INTEGER;
     ALTER TABLE folders ADD COLUMN pin_order INTEGER;
     ALTER TABLE items ADD COLUMN pin_order INTEGER;
+"#,
+    ),
+    // App settings as key/value rows; a missing key means the default (see `settings`).
+    Migration::Sql(
+        r#"
+    CREATE TABLE settings (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+    );
 "#,
     ),
 ];
@@ -187,5 +198,28 @@ mod tests {
             .unwrap();
         assert_eq!(readme, "vpn: `!0!`");
         assert_eq!(bodies, vec!["pass: `!0!` `!1!`", "literal {{0}}"]);
+    }
+
+    #[test]
+    fn migration_5_adds_settings_with_defaults() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate_to(&conn, 4).unwrap();
+        conn.execute_batch(
+            "INSERT INTO projects (id, name, created_at, updated_at, pin_order)
+             VALUES (1, 'Acme', 0, 0, 0);",
+        )
+        .unwrap();
+
+        migrate(&conn).unwrap();
+
+        let name: String = conn
+            .query_row("SELECT name FROM projects WHERE pin_order = 0", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(name, "Acme");
+        let loaded = settings::load(&conn).unwrap();
+        assert_eq!(loaded.unlock_window_secs, Some(600));
+        assert!(!loaded.backup.configured);
     }
 }

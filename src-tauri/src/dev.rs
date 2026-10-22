@@ -1,6 +1,8 @@
 //! Debug-only switches for unattended development: parallel dev runs and scripted testing.
 //! Compiled out of release builds.
 
+use std::{collections::BTreeMap, sync::Mutex};
+
 use zeroize::Zeroizing;
 
 use crate::crypto::VaultKey;
@@ -27,4 +29,23 @@ pub fn db_file() -> String {
             "coffer-dev.db".to_string()
         }
     })
+}
+
+/// Stands in for the Keychain in insecure runs (the backup key), so a rebuilt dev binary never
+/// waits on a Keychain access prompt. Lost when the app quits.
+static SECRETS: Mutex<BTreeMap<String, Zeroizing<Vec<u8>>>> = Mutex::new(BTreeMap::new());
+
+pub fn load_secret(account: &str) -> Option<Zeroizing<Vec<u8>>> {
+    SECRETS
+        .lock()
+        .expect("dev secrets lock poisoned")
+        .get(account)
+        .cloned()
+}
+
+pub fn store_secret(account: &str, bytes: &[u8]) {
+    SECRETS
+        .lock()
+        .expect("dev secrets lock poisoned")
+        .insert(account.to_string(), Zeroizing::new(bytes.to_vec()));
 }

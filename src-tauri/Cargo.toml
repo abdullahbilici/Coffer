@@ -22,15 +22,18 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 aes-gcm = "0.11.1"
-zeroize = "1.9.1"
+zeroize = { version = "1.9.1", features = ["serde"] }
 security-framework = "3.7.0"
 block2 = "0.6.2"
 objc2 = "0.6.5"
-objc2-foundation = { version = "0.3.2", features = ["NSDistributedNotificationCenter", "NSNotification", "NSString"] }
+objc2-foundation = { version = "0.3.2", features = ["NSDate", "NSDateFormatter", "NSDistributedNotificationCenter", "NSFormatter", "NSNotification", "NSString"] }
 objc2-local-authentication = "0.3.2"
 thiserror = "2.0.21"
 tauri-plugin-opener = "2.7.2"
-objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSWorkspace"] }
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSPasteboard", "NSWorkspace"] }
+argon2 = "0.6.0"
+getrandom = "0.4.3"
+tauri-plugin-dialog = "2.8.3"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
@@ -40,3 +43,10 @@ lto = true
 opt-level = 3
 panic = "abort"
 strip = true
+
+# Argon2id is unbearably slow unoptimized; dev builds would take seconds per backup unlock.
+[profile.dev.package.argon2]
+opt-level = 3
+
+[profile.dev.package.blake2]
+opt-level = 3

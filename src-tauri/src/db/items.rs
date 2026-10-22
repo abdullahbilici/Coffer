@@ -125,7 +125,7 @@ pub fn encrypted(conn: &Connection, id: i64) -> AppResult<Encrypted> {
 /// (secure, body, nonce, ciphertext)
 type BodyColumns<'a> = (bool, Option<&'a str>, Option<&'a [u8]>, Option<&'a [u8]>);
 
-fn body_columns(body: &Body) -> BodyColumns<'_> {
+pub(super) fn body_columns(body: &Body) -> BodyColumns<'_> {
     match body {
         Body::Plain(text) => (false, Some(text.as_str()), None, None),
         Body::Secure(s) => (true, None, Some(&s.nonce), Some(&s.ciphertext)),
@@ -231,7 +231,7 @@ fn tags_of(conn: &Connection, id: i64) -> AppResult<Vec<String>> {
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
-fn all_tags(conn: &Connection) -> AppResult<HashMap<i64, Vec<String>>> {
+pub(super) fn all_tags(conn: &Connection) -> AppResult<HashMap<i64, Vec<String>>> {
     let mut stmt =
         conn.prepare("SELECT item_id, tag FROM item_tags ORDER BY tag COLLATE NOCASE")?;
     let mut rows = stmt.query([])?;

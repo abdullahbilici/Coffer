@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Run } from "../app/actions";
+import type { Copy, Run } from "../app/actions";
 import type { MarkdownChips } from "../components/views/Markdown";
 import { secretValues, toPlainText } from "../lib/markup";
 import { toggled } from "../lib/sets";
@@ -16,8 +16,7 @@ type Options = {
   reveal: () => Promise<string>;
   session: Session;
   run: Run;
-  /** Writes to the clipboard and confirms with a toast. */
-  onCopy: (text: string) => Promise<void>;
+  onCopy: Copy;
 };
 
 /**
@@ -59,10 +58,10 @@ export function useSecrets(options: Options) {
     run(async () => {
       const text = await full();
       const value = wholeBody ? text : secretValues(text)[index];
-      if (value !== undefined) await onCopy(value);
+      if (value !== undefined) await onCopy(value, true);
     });
 
-  const copyAll = () => run(async () => onCopy(toPlainText(await full())));
+  const copyAll = () => run(async () => onCopy(toPlainText(await full()), isProtected));
 
   const chips: MarkdownChips = {
     secrets: wholeBody || plaintext === null ? null : secretValues(plaintext),

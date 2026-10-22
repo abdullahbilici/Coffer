@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { CopyPlus, KeyRound, Pencil, Pin, PinOff, Trash2 } from "lucide-react";
-import type { Run, VaultActions } from "../../app/actions";
+import type { Copy, Run, VaultActions } from "../../app/actions";
 import type { Session } from "../../hooks/useSession";
 import { api, type Item, type SaveItemInput, type Tree } from "../../lib/api";
 import { pinnedSet } from "../../lib/pins";
@@ -19,7 +19,7 @@ type Props = {
   actions: VaultActions;
   onSave: (input: SaveItemInput) => Promise<void>;
   /** Writes to the clipboard and confirms with a toast. */
-  onCopy: (text: string) => Promise<void>;
+  onCopy: Copy;
 };
 
 const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });

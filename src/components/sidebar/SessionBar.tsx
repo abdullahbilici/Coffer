@@ -1,4 +1,4 @@
-import { Lock, LockOpen } from "lucide-react";
+import { Lock, LockOpen, Settings } from "lucide-react";
 import { useNow } from "../../hooks/useNow";
 import type { Session } from "../../hooks/useSession";
 import { IconButton } from "../ui/IconButton";
@@ -11,12 +11,16 @@ function formatRemaining(ms: number): string {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
-export function SessionBar({ session, onLock }: { session: Session; onLock: () => void }) {
+type Props = { session: Session; onLock: () => void; onSettings: () => void };
+
+export function SessionBar({ session, onLock, onSettings }: Props) {
+  const settings = <IconButton icon={Settings} label="Settings" size="sm" onClick={onSettings} />;
   if (!session.unlocked) {
     return (
       <div className={styles.sessionBar}>
         <Lock size={14} strokeWidth={1.75} />
-        <span>Secure items hidden</span>
+        <span className={styles.sessionState}>Secure items hidden</span>
+        {settings}
       </div>
     );
   }
@@ -24,8 +28,11 @@ export function SessionBar({ session, onLock }: { session: Session; onLock: () =
     <div className={styles.sessionBar} data-unlocked>
       <LockOpen size={14} strokeWidth={1.75} />
       <span>Unlocked</span>
-      {session.expiresAt !== null && <Countdown until={session.expiresAt} />}
+      <span className={styles.countdown}>
+        {session.expiresAt !== null && <Countdown until={session.expiresAt} />}
+      </span>
       <IconButton icon={Lock} label="Lock now" size="sm" onClick={onLock} />
+      {settings}
     </div>
   );
 }
@@ -33,5 +40,5 @@ export function SessionBar({ session, onLock }: { session: Session; onLock: () =
 /** The only part of the app that ticks every second. */
 function Countdown({ until }: { until: number }) {
   const now = useNow();
-  return <span className={styles.countdown}>{formatRemaining(until - now)}</span>;
+  return formatRemaining(until - now);
 }

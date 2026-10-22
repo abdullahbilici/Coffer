@@ -32,6 +32,7 @@ type Props = {
   onEdit: (edit: TreeEdit | null) => void;
   session: Session;
   onLock: () => void;
+  onSettings: () => void;
   actions: VaultActions;
 };
 
@@ -149,7 +150,7 @@ export function Sidebar(props: Props) {
         ]}
       />
 
-      <SessionBar session={props.session} onLock={props.onLock} />
+      <SessionBar session={props.session} onLock={props.onLock} onSettings={props.onSettings} />
     </aside>
   );
 }
