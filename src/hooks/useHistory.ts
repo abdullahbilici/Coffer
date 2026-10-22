@@ -1,5 +1,5 @@
 import { useCallback, useReducer, useRef } from "react";
-import type { Selection } from "../lib/selection";
+import { isEditor, type Selection } from "../lib/selection";
 
 /** Where the user was: what the main pane showed, and the search that was open. */
 export type Place = { selection: Selection; query: string };
@@ -11,7 +11,7 @@ const samePlace = (a: Place, b: Place) =>
 
 /** Editors and the blank start screen aren't places worth going back to. */
 const keep = (place: Place) =>
-  place.selection?.kind !== "newItem" && (place.selection !== null || place.query !== "");
+  !isEditor(place.selection) && (place.selection !== null || place.query !== "");
 
 /**
  * Back/forward history like Safari or Finder. `record` is called on every navigation;

@@ -50,12 +50,56 @@ export type ItemSummary = {
 /** `body` is `null` for secure items and a `` `!0!` ``-marker template for items with inline secrets. */
 export type Item = ItemSummary & { body: string | null };
 
+/** A local calendar day, `YYYY-MM-DD`. */
+export type DateString = string;
+
+export type Todo = {
+  id: number;
+  /** `null` for a general todo. */
+  projectId: number | null;
+  /** An optional linked note. */
+  itemId: number | null;
+  title: string;
+  /** Markdown; with inline secrets, a `` `!0!` ``-marker template. */
+  description: string;
+  hasSecrets: boolean;
+  dueDate: DateString | null;
+  done: boolean;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type Cycle = "monthly" | "yearly" | "once";
+
+/** An amount in integer hundredths, due from `from` on. */
+export type Price = { from: DateString; amount: number };
+
+export type Payment = {
+  id: number;
+  /** `null` for a personal payment. */
+  projectId: number | null;
+  name: string;
+  /** ISO 4217 code, e.g. `USD`. */
+  currency: string;
+  cycle: Cycle;
+  /** The first due date. */
+  startDate: DateString;
+  /** Nothing is due on or after this day. */
+  cancelDate: DateString | null;
+  /** Oldest first; never empty. */
+  prices: Price[];
+  createdAt: number;
+  updatedAt: number;
+};
+
 export type Tree = {
   projects: ProjectSummary[];
   folders: Folder[];
   items: ItemSummary[];
   /** Pinned projects, folders and items in the user's order. */
   pins: PinRef[];
+  todos: Todo[];
+  payments: Payment[];
 };
 
 export type SaveItemInput = {
@@ -66,6 +110,28 @@ export type SaveItemInput = {
   body: string;
   secure: boolean;
   tags: string[];
+};
+
+export type SaveTodoInput = {
+  id: number | null;
+  projectId: number | null;
+  itemId: number | null;
+  title: string;
+  /** Full text with `` `!x!` `` secrets; the backend seals them. */
+  description: string;
+  dueDate: DateString | null;
+};
+
+export type SavePaymentInput = {
+  id: number | null;
+  projectId: number | null;
+  name: string;
+  currency: string;
+  cycle: Cycle;
+  startDate: DateString;
+  cancelDate: DateString | null;
+  /** Required when creating (`from` is then ignored); when editing, records a price change. */
+  price: Price | null;
 };
 
 export function isAppError(error: unknown): error is AppError {
@@ -111,6 +177,16 @@ export const api = {
   moveItem: (id: number, projectId: number, folderId: number | null) =>
     invoke<void>("move_item", { id, projectId, folderId }),
   deleteItem: (id: number) => invoke<void>("delete_item", { id }),
+  /** Ids of notes whose readable body contains `query`; never looks inside secrets. */
+  searchItemBodies: (query: string) => invoke<number[]>("search_item_bodies", { query }),
+
+  saveTodo: (input: SaveTodoInput) => invoke<Todo>("save_todo", { input }),
+  revealTodo: (id: number) => invoke<string>("reveal_todo", { id }),
+  setTodoDone: (id: number, done: boolean) => invoke<void>("set_todo_done", { id, done }),
+  deleteTodo: (id: number) => invoke<void>("delete_todo", { id }),
+
+  savePayment: (input: SavePaymentInput) => invoke<Payment>("save_payment", { input }),
+  deletePayment: (id: number) => invoke<void>("delete_payment", { id }),
 
   setPinned: (pin: PinRef, pinned: boolean) => invoke<void>("set_pinned", { pin, pinned }),
   reorderPins: (order: PinRef[]) => invoke<void>("reorder_pins", { order }),

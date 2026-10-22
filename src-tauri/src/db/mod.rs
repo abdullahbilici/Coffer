@@ -1,7 +1,9 @@
 pub mod folders;
 pub mod items;
+pub mod payments;
 pub mod pins;
 pub mod projects;
+pub mod todos;
 
 use std::path::Path;
 
@@ -78,6 +80,49 @@ const MIGRATIONS: &[Migration] = &[
     ALTER TABLE projects ADD COLUMN pin_order INTEGER;
     ALTER TABLE folders ADD COLUMN pin_order INTEGER;
     ALTER TABLE items ADD COLUMN pin_order INTEGER;
+"#,
+    ),
+    // Agenda: todos (general or per project) and payments with their price history.
+    // Dates are local calendar days as `YYYY-MM-DD`; amounts are integer hundredths.
+    Migration::Sql(
+        r#"
+    CREATE TABLE todos (
+        id          INTEGER PRIMARY KEY,
+        project_id  INTEGER REFERENCES projects (id) ON DELETE CASCADE,
+        item_id     INTEGER REFERENCES items (id) ON DELETE SET NULL,
+        title       TEXT    NOT NULL,
+        description TEXT    NOT NULL DEFAULT '',
+        nonce       BLOB,
+        ciphertext  BLOB,
+        due_date    TEXT,
+        done        INTEGER NOT NULL DEFAULT 0,
+        created_at  INTEGER NOT NULL,
+        updated_at  INTEGER NOT NULL
+    );
+
+    CREATE TABLE payments (
+        id          INTEGER PRIMARY KEY,
+        project_id  INTEGER REFERENCES projects (id) ON DELETE CASCADE,
+        name        TEXT    NOT NULL,
+        currency    TEXT    NOT NULL,
+        cycle       TEXT    NOT NULL CHECK (cycle IN ('monthly', 'yearly', 'once')),
+        start_date  TEXT    NOT NULL,
+        cancel_date TEXT,
+        created_at  INTEGER NOT NULL,
+        updated_at  INTEGER NOT NULL
+    );
+
+    -- A price applies to every due date from `effective_date` until the next price.
+    CREATE TABLE payment_prices (
+        payment_id     INTEGER NOT NULL REFERENCES payments (id) ON DELETE CASCADE,
+        effective_date TEXT    NOT NULL,
+        amount         INTEGER NOT NULL,
+        PRIMARY KEY (payment_id, effective_date)
+    );
+
+    CREATE INDEX todos_project ON todos (project_id);
+    CREATE INDEX todos_item ON todos (item_id);
+    CREATE INDEX payments_project ON payments (project_id);
 "#,
     ),
 ];
@@ -187,5 +232,42 @@ mod tests {
             .unwrap();
         assert_eq!(readme, "vpn: `!0!`");
         assert_eq!(bodies, vec!["pass: `!0!` `!1!`", "literal {{0}}"]);
+    }
+
+    #[test]
+    fn agenda_migration_runs_on_existing_vault() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "foreign_keys", true).unwrap();
+        // The agenda tables are the newest migration.
+        migrate_to(&conn, MIGRATIONS.len() - 1).unwrap();
+        conn.execute_batch(
+            "INSERT INTO projects (id, name, created_at, updated_at, pin_order)
+             VALUES (1, 'Acme', 0, 0, 0);
+             INSERT INTO items (id, project_id, title, secure, body, created_at, updated_at)
+             VALUES (1, 1, 'Login', 0, 'user: `apo`', 0, 0);",
+        )
+        .unwrap();
+
+        migrate(&conn).unwrap();
+
+        conn.execute_batch(
+            "INSERT INTO todos (project_id, item_id, title, created_at, updated_at)
+             VALUES (1, 1, 'Rotate key', 0, 0);
+             INSERT INTO payments (project_id, name, currency, cycle, start_date, created_at,
+             updated_at) VALUES (1, 'Hosting', 'USD', 'monthly', '2026-01-01', 0, 0);",
+        )
+        .unwrap();
+        let todos = todos::list(&conn).unwrap();
+        assert_eq!(todos.len(), 1);
+        assert_eq!(todos[0].item_id, Some(1));
+        assert_eq!(items::list(&conn).unwrap().len(), 1);
+        assert!(
+            conn.execute(
+                "INSERT INTO payments (name, currency, cycle, start_date, created_at, updated_at)
+                 VALUES ('Bad', 'USD', 'weekly', '2026-01-01', 0, 0)",
+                [],
+            )
+            .is_err()
+        );
     }
 }

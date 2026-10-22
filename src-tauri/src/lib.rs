@@ -13,7 +13,7 @@ mod time;
 
 use tauri::Manager;
 
-use commands::{folders, items, pins, projects, session as session_cmd, vault};
+use commands::{folders, items, payments, pins, projects, session as session_cmd, todos, vault};
 use state::AppState;
 
 /// Dev builds keep their own vault file, so testing (and `npm run reseed`) never touches the
@@ -23,6 +23,18 @@ const DB_FILE: &str = "coffer-dev.db";
 #[cfg(not(debug_assertions))]
 const DB_FILE: &str = "coffer.db";
 
+/// Dev builds can use another vault file via `COFFER_DEV_DB`, e.g. to run two branches side by
+/// side without sharing data.
+fn db_file() -> String {
+    #[cfg(debug_assertions)]
+    if let Ok(name) = std::env::var("COFFER_DEV_DB")
+        && !name.is_empty()
+    {
+        return name;
+    }
+    DB_FILE.to_string()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -30,7 +42,7 @@ pub fn run() {
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
-            let conn = db::open(&dir.join(DB_FILE))?;
+            let conn = db::open(&dir.join(db_file()))?;
             app.manage(AppState::new(conn));
             lock_events::observe(app.handle());
             Ok(())
@@ -56,6 +68,13 @@ pub fn run() {
             items::move_item,
             items::duplicate_item,
             items::delete_item,
+            items::search_item_bodies,
+            todos::save_todo,
+            todos::reveal_todo,
+            todos::set_todo_done,
+            todos::delete_todo,
+            payments::save_payment,
+            payments::delete_payment,
             pins::set_pinned,
             pins::reorder_pins,
         ])

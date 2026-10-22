@@ -56,7 +56,7 @@ function topmost(tags: TagNode[]): TagNode[] {
 }
 
 /**
- * Search across notes, projects, folders and tags. Notes and tags expand in place so results
+ * Search across notes (titles, tags and readable bodies), projects, folders and tags. Notes and tags expand in place so results
  * stay on screen; projects and folders navigate.
  */
 export function SearchView({ query, tree, session, run, actions, onCopy }: Props) {
@@ -67,10 +67,26 @@ export function SearchView({ query, tree, session, run, actions, onCopy }: Props
   const q = query.trim().toLowerCase();
   const matches = (text: string) => text.toLowerCase().includes(q);
 
+  // Note bodies are searched in the backend, which never looks inside secrets.
+  const [bodyMatches, setBodyMatches] = useState<ReadonlySet<number>>(() => new Set());
+  const version = tree.items.reduce((latest, i) => Math.max(latest, i.updatedAt), 0);
+  useEffect(() => {
+    let current = true;
+    void run(async () => {
+      const ids = await api.searchItemBodies(q);
+      if (current) setBodyMatches(new Set(ids));
+    });
+    return () => {
+      current = false;
+    };
+  }, [q, version, run]);
+
   const results = {
     project: tree.projects.filter((p) => matches(p.name)),
     folder: tree.folders.filter((f) => matches(f.name)),
-    note: tree.items.filter((i) => matches(i.title) || i.tags.some(matches)),
+    note: tree.items.filter(
+      (i) => matches(i.title) || i.tags.some(matches) || bodyMatches.has(i.id),
+    ),
     tag: topmost(allTags(buildTagTree(tree.items)).filter((t) => matches(t.path))),
   };
 

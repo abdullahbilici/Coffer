@@ -10,7 +10,11 @@ import { ItemEditor, emptyDraft } from "../components/views/ItemEditor";
 import { ItemListView } from "../components/views/ItemListView";
 import { ItemView } from "../components/views/ItemView";
 import { LockScreen } from "../components/views/LockScreen";
+import { PaymentEditor } from "../components/views/PaymentEditor";
+import { PaymentsView } from "../components/views/PaymentsView";
 import { SearchView } from "../components/views/SearchView";
+import { TodoEditor } from "../components/views/TodoEditor";
+import { TodosView } from "../components/views/TodosView";
 import { useExpansion } from "../hooks/useExpansion";
 import { useNavigation } from "../hooks/useNavigation";
 import { useSession } from "../hooks/useSession";
@@ -95,6 +99,7 @@ export function App() {
             key={`project:${selection.id}`}
             projectId={selection.id}
             folderId={null}
+            deleting={deleting}
             {...shared}
           />
         );
@@ -106,6 +111,7 @@ export function App() {
               key={`folder:${folder.id}`}
               projectId={folder.projectId}
               folderId={folder.id}
+              deleting={deleting}
               {...shared}
             />
           )
@@ -133,6 +139,31 @@ export function App() {
             tree={tree}
             onOpen={actions.openItem}
             onSelectTag={actions.selectTag}
+          />
+        );
+      case "todos":
+        return <TodosView deleting={deleting} {...shared} />;
+      case "todoEditor":
+        return (
+          <TodoEditor
+            key={`${selection.id}:${selection.projectId}`}
+            todoId={selection.id}
+            projectId={selection.projectId}
+            onCancel={nav.back}
+            {...shared}
+          />
+        );
+      case "payments":
+        return <PaymentsView tree={tree} actions={actions} />;
+      case "paymentEditor":
+        return (
+          <PaymentEditor
+            key={`${selection.id}:${selection.projectId}`}
+            paymentId={selection.id}
+            projectId={selection.projectId}
+            tree={tree}
+            actions={actions}
+            onCancel={nav.back}
           />
         );
       default:

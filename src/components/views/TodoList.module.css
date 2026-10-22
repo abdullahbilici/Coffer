@@ -1,0 +1,129 @@
+/* Rows are inset with gaps between them, so hover and open states never touch. */
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-elevated);
+  list-style: none;
+}
+
+.entry {
+  border-radius: var(--radius-md);
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.entryOpen {
+  background: var(--color-bg-subtle);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 36px;
+  padding: 0 var(--space-3) 0 var(--space-1);
+  border-radius: var(--radius-md);
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.row:hover {
+  background: var(--color-bg-hover);
+}
+
+.check {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  transition: color var(--duration-fast) var(--ease-out);
+}
+
+.check:hover {
+  color: var(--color-text);
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.done {
+  color: var(--color-text-tertiary);
+  text-decoration: line-through;
+}
+
+.due {
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.overdue {
+  color: var(--color-text);
+  font-weight: 500;
+}
+
+.trail {
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+}
+
+.chevron {
+  transition: transform var(--duration-base) var(--ease-out);
+}
+
+.entryOpen .chevron {
+  transform: rotate(180deg);
+}
+
+/* Height animation via grid rows: 0fr collapses, 1fr fits the content. */
+.panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--duration-slow) var(--ease-out);
+}
+
+.entryOpen .panel {
+  grid-template-rows: 1fr;
+}
+
+.panelInner {
+  min-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity var(--duration-base) var(--ease-out);
+}
+
+.entryOpen .panelInner {
+  opacity: 1;
+}
+
+/* Lines up with the title, past the check. */
+.details {
+  padding: 0 var(--space-3) var(--space-2) calc(var(--space-1) + 28px + var(--space-2));
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: var(--space-1);
+}
+
+.spacer {
+  flex: 1;
+}

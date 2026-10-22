@@ -5,7 +5,7 @@ use serde::Serialize;
 
 pub use super::SecureBody;
 use super::expect_changed;
-use crate::error::AppResult;
+use crate::{error::AppResult, secrets};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -215,6 +215,25 @@ pub fn delete(conn: &Connection, id: i64) -> AppResult<()> {
     expect_changed(conn.execute("DELETE FROM items WHERE id = ?1", [id])?)
 }
 
+/// Ids of readable notes whose text contains `query`, case-insensitively. Secure bodies and the
+/// secrets inside templates are never searched.
+pub fn search_bodies(conn: &Connection, query: &str) -> AppResult<Vec<i64>> {
+    let query = query.to_lowercase();
+    let mut stmt = conn.prepare("SELECT id, body FROM items WHERE secure = 0 AND body != ''")?;
+    let mut rows = stmt.query([])?;
+    let mut ids = Vec::new();
+    while let Some(row) = rows.next()? {
+        let body: String = row.get("body")?;
+        if secrets::strip_markers(&body)
+            .to_lowercase()
+            .contains(&query)
+        {
+            ids.push(row.get("id")?);
+        }
+    }
+    Ok(ids)
+}
+
 fn replace_tags(conn: &Connection, id: i64, tags: &[String]) -> AppResult<()> {
     conn.execute("DELETE FROM item_tags WHERE item_id = ?1", [id])?;
     let mut stmt = conn.prepare("INSERT INTO item_tags (item_id, tag) VALUES (?1, ?2)")?;
@@ -310,5 +329,42 @@ mod tests {
 
         assert!(list(&conn).unwrap().is_empty());
         assert!(all_tags(&conn).unwrap().is_empty());
+    }
+
+    #[test]
+    fn searches_readable_bodies_only() {
+        let conn = open_in_memory();
+        let project = projects::insert(&conn, "Acme", "", 0).unwrap();
+        let bodies = [
+            Body::Plain("Host: DB.example.com".into()),
+            Body::Inline {
+                template: "pass: `!0!`".into(),
+                secrets: SecureBody {
+                    nonce: vec![0],
+                    ciphertext: vec![0],
+                },
+            },
+            Body::Secure(SecureBody {
+                nonce: vec![0],
+                ciphertext: vec![0],
+            }),
+        ];
+        let ids: Vec<i64> = bodies
+            .iter()
+            .map(|body| {
+                let record = ItemRecord {
+                    project_id: project,
+                    folder_id: None,
+                    title: "Note",
+                    body,
+                    tags: &[],
+                };
+                insert(&conn, &record, 0).unwrap()
+            })
+            .collect();
+
+        assert_eq!(search_bodies(&conn, "db.EXAMPLE").unwrap(), [ids[0]]);
+        assert_eq!(search_bodies(&conn, "pass").unwrap(), [ids[1]]);
+        assert!(search_bodies(&conn, "0").unwrap().is_empty());
     }
 }

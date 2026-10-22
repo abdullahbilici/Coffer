@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { CopyPlus, KeyRound, Pencil, Pin, PinOff, Trash2 } from "lucide-react";
+import { CopyPlus, KeyRound, Pencil, Pin, PinOff } from "lucide-react";
 import type { Run, VaultActions } from "../../app/actions";
 import type { Session } from "../../hooks/useSession";
 import { api, type Item, type SaveItemInput, type Tree } from "../../lib/api";
 import { pinnedSet } from "../../lib/pins";
 import { Button } from "../ui/Button";
+import { DeleteButton } from "../ui/DeleteButton";
 import { Breadcrumb, pathCrumbs } from "./Breadcrumb";
 import { ItemBody } from "./ItemBody";
 import { ItemEditor } from "./ItemEditor";
@@ -27,7 +28,6 @@ const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", tim
 export function ItemView({ itemId, tree, session, run, actions, onSave, onCopy }: Props) {
   const [item, setItem] = useState<Item | null>(null);
   const [editing, setEditing] = useState<SaveItemInput | null>(null);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const summary = tree.items.find((i) => i.id === itemId);
 
   // Refetch whenever the tree reports a newer version; skip once the item is gone.
@@ -105,17 +105,7 @@ export function ItemView({ itemId, tree, session, run, actions, onSave, onCopy }
             >
               Duplicate
             </Button>
-            <Button
-              variant={confirmingDelete ? "danger" : "ghost"}
-              size="sm"
-              icon={Trash2}
-              onClick={() =>
-                confirmingDelete ? actions.deleteItem(item.id) : setConfirmingDelete(true)
-              }
-              onMouseLeave={() => setConfirmingDelete(false)}
-            >
-              {confirmingDelete ? "Confirm delete" : "Delete"}
-            </Button>
+            <DeleteButton onDelete={() => actions.deleteItem(item.id)} />
           </div>
         </header>
 

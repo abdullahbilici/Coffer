@@ -8,7 +8,9 @@ use crate::{
     db::{
         SecureBody, folders,
         items::{self, Body, ItemRecord},
+        payments::{self, PaymentRecord},
         projects,
+        todos::{self, TodoRecord},
     },
     error::AppResult,
     secrets,
@@ -440,6 +442,220 @@ const PROJECTS: &[SeedProject] = &[
     },
 ];
 
+struct SeedTodo {
+    /// `None` for a general todo.
+    project: Option<&'static str>,
+    title: &'static str,
+    description: &'static str,
+    /// Days from today; negative is overdue.
+    due_in: Option<i64>,
+    done: bool,
+    /// Title of a note in the same project (or anywhere, for general todos).
+    note: Option<&'static str>,
+}
+
+const fn todo(
+    project: Option<&'static str>,
+    title: &'static str,
+    due_in: Option<i64>,
+    description: &'static str,
+) -> SeedTodo {
+    SeedTodo {
+        project,
+        title,
+        description,
+        due_in,
+        done: false,
+        note: None,
+    }
+}
+
+const TODOS: &[SeedTodo] = &[
+    todo(
+        None,
+        "Renew passport",
+        Some(18),
+        "Appointment at the consulate, bring two photos.",
+    ),
+    todo(
+        None,
+        "Call the accountant",
+        Some(0),
+        "Ask about the Q3 VAT filing.",
+    ),
+    todo(None, "Back up the NAS to the external disk", Some(-3), ""),
+    todo(None, "Read the Postgres 18 release notes", None, ""),
+    SeedTodo {
+        done: true,
+        ..todo(None, "Pay the electricity bill", Some(-6), "")
+    },
+    SeedTodo {
+        note: Some("Postgres (staging)"),
+        ..todo(
+            Some("Acme Corp"),
+            "Rotate the staging DB password",
+            Some(2),
+            "New password: `!stg-rotated-demo-5512!`\nUpdate `.env (staging)` afterwards.",
+        )
+    },
+    todo(
+        Some("Acme Corp"),
+        "Send the October invoice",
+        Some(-1),
+        "To `billing@acme-demo.com`, net 30.",
+    ),
+    todo(
+        Some("Acme Corp"),
+        "Review the checkout redesign in Figma",
+        Some(6),
+        "",
+    ),
+    SeedTodo {
+        note: Some("Namecheap"),
+        ..todo(
+            Some("Muhit"),
+            "Move the domain to Cloudflare",
+            None,
+            "Unlock code from Namecheap: `!EPP-demo-77AC!`",
+        )
+    },
+    todo(
+        Some("Muhit"),
+        "Submit 2.4 to App Review",
+        Some(0),
+        "- [ ] Screenshots\n- [ ] Release notes",
+    ),
+    todo(
+        Some("Northwind Logistics"),
+        "Cost estimate for tile hosting",
+        Some(9),
+        "",
+    ),
+    SeedTodo {
+        done: true,
+        ..todo(
+            Some("Blueprint Studio"),
+            "Renew the GT America web license",
+            Some(-12),
+            "",
+        )
+    },
+];
+
+struct SeedPayment {
+    /// `None` for a personal payment.
+    project: Option<&'static str>,
+    name: &'static str,
+    currency: &'static str,
+    cycle: &'static str,
+    start_date: &'static str,
+    cancel_date: Option<&'static str>,
+    /// (from, amount in hundredths). The first applies from `start_date`.
+    prices: &'static [(&'static str, i64)],
+}
+
+const PAYMENTS: &[SeedPayment] = &[
+    SeedPayment {
+        project: Some("Acme Corp"),
+        name: "AWS",
+        currency: "USD",
+        cycle: "monthly",
+        start_date: "2025-03-04",
+        cancel_date: None,
+        prices: &[("2025-03-04", 8_400), ("2026-02-04", 11_250)],
+    },
+    SeedPayment {
+        project: Some("Acme Corp"),
+        name: "Sentry Team",
+        currency: "USD",
+        cycle: "monthly",
+        start_date: "2025-05-12",
+        cancel_date: None,
+        prices: &[("2025-05-12", 2_600)],
+    },
+    SeedPayment {
+        project: Some("Muhit"),
+        name: "Hetzner CX32",
+        currency: "EUR",
+        cycle: "monthly",
+        start_date: "2024-11-01",
+        cancel_date: None,
+        prices: &[("2024-11-01", 680), ("2026-04-01", 759)],
+    },
+    SeedPayment {
+        project: Some("Muhit"),
+        name: "Apple Developer Program",
+        currency: "USD",
+        cycle: "yearly",
+        start_date: "2024-12-20",
+        cancel_date: None,
+        prices: &[("2024-12-20", 9_900)],
+    },
+    SeedPayment {
+        project: Some("Muhit"),
+        name: "muhit-demo.com",
+        currency: "USD",
+        cycle: "yearly",
+        start_date: "2025-03-14",
+        cancel_date: None,
+        prices: &[("2025-03-14", 1_098)],
+    },
+    SeedPayment {
+        project: Some("Northwind Logistics"),
+        name: "Mapbox",
+        currency: "USD",
+        cycle: "monthly",
+        start_date: "2025-09-01",
+        cancel_date: Some("2026-03-01"),
+        prices: &[("2025-09-01", 5_000)],
+    },
+    SeedPayment {
+        project: Some("Blueprint Studio"),
+        name: "Figma Professional",
+        currency: "USD",
+        cycle: "monthly",
+        start_date: "2025-01-08",
+        cancel_date: None,
+        prices: &[("2025-01-08", 1_500), ("2025-07-08", 1_600)],
+    },
+    SeedPayment {
+        project: Some("Blueprint Studio"),
+        name: "GT America web license",
+        currency: "USD",
+        cycle: "once",
+        start_date: "2026-10-11",
+        cancel_date: None,
+        prices: &[("2026-10-11", 32_000)],
+    },
+    SeedPayment {
+        project: None,
+        name: "iCloud+ 2 TB",
+        currency: "TRY",
+        cycle: "monthly",
+        start_date: "2024-06-15",
+        cancel_date: None,
+        prices: &[("2024-06-15", 21_999), ("2025-08-15", 34_999)],
+    },
+    SeedPayment {
+        project: None,
+        name: "Home internet",
+        currency: "TRY",
+        cycle: "monthly",
+        start_date: "2025-02-27",
+        cancel_date: None,
+        prices: &[("2025-02-27", 64_900)],
+    },
+    SeedPayment {
+        project: None,
+        name: "Spotify",
+        currency: "TRY",
+        cycle: "monthly",
+        start_date: "2024-01-03",
+        cancel_date: Some("2026-06-03"),
+        prices: &[("2024-01-03", 5_999)],
+    },
+];
+
 pub fn run_if_requested(conn: &Connection, key: &VaultKey) -> AppResult<()> {
     if std::env::var("COFFER_SEED").as_deref() != Ok("1") || !projects::list(conn)?.is_empty() {
         return Ok(());
@@ -498,7 +714,76 @@ fn seed(conn: &Connection, key: &VaultKey) -> AppResult<()> {
             items::insert(conn, &record, now)?;
         }
     }
+
+    let project_id = |name: Option<&str>| -> AppResult<Option<i64>> {
+        let Some(name) = name else { return Ok(None) };
+        let all = projects::list(conn)?;
+        Ok(all.into_iter().find(|p| p.name == name).map(|p| p.id))
+    };
+    let all_items = items::list(conn)?;
+    let today = now / DAY_MS;
+    for todo in TODOS {
+        let project = project_id(todo.project)?;
+        let item_id = todo.note.and_then(|title| {
+            all_items
+                .iter()
+                .find(|i| i.title == title && project.is_none_or(|p| i.project_id == p))
+                .map(|i| i.id)
+        });
+        let sealed = seal_inline(todo.description)?;
+        let (description, secrets) = match &sealed {
+            Some((template, secrets)) => (template.as_str(), Some(secrets)),
+            None => (todo.description, None),
+        };
+        let due_date = todo.due_in.map(|days| date_of_day(today + days));
+        let record = TodoRecord {
+            project_id: project,
+            item_id,
+            title: todo.title,
+            description,
+            secrets,
+            due_date: due_date.as_deref(),
+        };
+        let id = todos::insert(conn, &record, now)?;
+        if todo.done {
+            todos::set_done(conn, id, true, now)?;
+        }
+    }
+
+    for payment in PAYMENTS {
+        let record = PaymentRecord {
+            project_id: project_id(payment.project)?,
+            name: payment.name,
+            currency: payment.currency,
+            cycle: payment.cycle,
+            start_date: payment.start_date,
+            cancel_date: payment.cancel_date,
+        };
+        let [(_, first), changes @ ..] = payment.prices else {
+            panic!("seed payment {} has no price", payment.name);
+        };
+        let id = payments::insert(conn, &record, *first, now)?;
+        for (from, amount) in changes {
+            payments::update(conn, id, &record, Some((from, *amount)), now)?;
+        }
+    }
     Ok(())
+}
+
+const DAY_MS: i64 = 24 * 60 * 60 * 1000;
+
+/// `YYYY-MM-DD` for a count of days since 1970-01-01 (Howard Hinnant's `civil_from_days`).
+fn date_of_day(days: i64) -> String {
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    format!("{year:04}-{month:02}-{day:02}")
 }
 
 fn lookup(folder_ids: &[(&str, i64)], name: &str) -> i64 {
@@ -537,5 +822,19 @@ mod tests {
         let spans =
             crypto::decrypt(&key, &encrypted.sealed.nonce, &encrypted.sealed.ciphertext).unwrap();
         assert!(spans.contains("Tr0ub4dor&3-demo"));
+
+        let todos = todos::list(&conn).unwrap();
+        assert_eq!(todos.len(), TODOS.len());
+        assert!(todos.iter().any(|t| t.has_secrets && t.item_id.is_some()));
+        let payments = payments::list(&conn).unwrap();
+        assert_eq!(payments.len(), PAYMENTS.len());
+        assert!(payments.iter().any(|p| p.prices.len() > 1));
+    }
+
+    #[test]
+    fn formats_days_as_dates() {
+        assert_eq!(date_of_day(0), "1970-01-01");
+        assert_eq!(date_of_day(20_513), "2026-03-01");
+        assert_eq!(date_of_day(-1), "1969-12-31");
     }
 }

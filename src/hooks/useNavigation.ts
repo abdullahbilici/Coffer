@@ -18,7 +18,12 @@ function placeExists(tree: Tree | null, { selection }: Place): boolean {
       return tree.items.some((i) => i.id === selection.id);
     case "tag":
       return tree.items.some((i) => hasTag(i, selection.path));
+    case "todos":
+    case "payments":
+      return true;
     case "newItem":
+    case "todoEditor":
+    case "paymentEditor":
       return false;
   }
 }
@@ -60,6 +65,9 @@ export function useNavigation(tree: Tree | null) {
   // Window listeners are registered once and read the latest handlers through a ref.
   const latest = useRef({ back, forward, select });
   latest.current = { back, forward, select };
+  // Stable, so actions that return to the previous place don't change on every render.
+  const goBack = useCallback(() => latest.current.back(), []);
+  const goForward = useCallback(() => latest.current.forward(), []);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -96,8 +104,8 @@ export function useNavigation(tree: Tree | null) {
     query,
     setQuery,
     select,
-    back,
-    forward,
+    back: goBack,
+    forward: goForward,
     canBack: history.canBack,
     canForward: history.canForward,
   };
