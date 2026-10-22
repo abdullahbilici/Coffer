@@ -1,5 +1,6 @@
 //! App settings as key/value rows. A missing row means the default, so new settings need no
-//! migration. Nothing here is secret: the backup key itself lives in the Keychain.
+//! migration. Nothing here is secret: the backup key and the assistant's API key live in the
+//! Keychain.
 
 use std::time::Duration;
 
@@ -15,6 +16,10 @@ const BACKUP_AUTO: &str = "backup_auto";
 const BACKUP_DIR: &str = "backup_dir";
 const BACKUP_LAST_AT: &str = "backup_last_at";
 const BACKUP_LAST_ERROR: &str = "backup_last_error";
+const ASSISTANT_URL: &str = "assistant_url";
+const ASSISTANT_MODEL: &str = "assistant_model";
+const ASSISTANT_CONTEXT: &str = "assistant_context";
+const ASSISTANT_KEY_SET: &str = "assistant_key_set";
 
 /// Stored for an optional duration that is switched off ("until screen locks", "never").
 const OFF: &str = "off";
@@ -23,6 +28,8 @@ pub const UNLOCK_WINDOW_CHOICES: &[u64] = &[60, 5 * 60, 10 * 60, 30 * 60, 60 * 6
 const DEFAULT_UNLOCK_WINDOW: u64 = 10 * 60;
 pub const CLIPBOARD_CLEAR_CHOICES: &[u64] = &[30, 60];
 const DEFAULT_CLIPBOARD_CLEAR: u64 = 30;
+pub const DEFAULT_ASSISTANT_URL: &str = "http://localhost:11434";
+pub const DEFAULT_ASSISTANT_MODEL: &str = "qwen3.8:27b";
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -32,6 +39,7 @@ pub struct Settings {
     /// `None`: copied secrets stay on the clipboard.
     pub clipboard_clear_secs: Option<u64>,
     pub backup: BackupSettings,
+    pub assistant: AssistantSettings,
 }
 
 #[derive(Serialize)]
@@ -43,6 +51,18 @@ pub struct BackupSettings {
     pub dir: Option<String>,
     pub last_at: Option<i64>,
     pub last_error: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssistantSettings {
+    /// Base URL of an Ollama server.
+    pub url: String,
+    pub model: String,
+    /// What the assistant should know: read into every conversation, never edited by it.
+    pub context: String,
+    /// An API key is stored in the Keychain; the key itself is never read for settings.
+    pub has_api_key: bool,
 }
 
 impl Settings {
@@ -124,6 +144,13 @@ pub fn load(conn: &Connection) -> AppResult<Settings> {
             last_at: get(conn, BACKUP_LAST_AT)?.and_then(|v| v.parse().ok()),
             last_error: get(conn, BACKUP_LAST_ERROR)?,
         },
+        assistant: AssistantSettings {
+            url: get(conn, ASSISTANT_URL)?.unwrap_or_else(|| DEFAULT_ASSISTANT_URL.to_string()),
+            model: get(conn, ASSISTANT_MODEL)?
+                .unwrap_or_else(|| DEFAULT_ASSISTANT_MODEL.to_string()),
+            context: get(conn, ASSISTANT_CONTEXT)?.unwrap_or_default(),
+            has_api_key: get_flag(conn, ASSISTANT_KEY_SET, false)?,
+        },
     })
 }
 
@@ -159,6 +186,16 @@ pub fn record_backup(conn: &Connection, result: Result<i64, &str>) -> AppResult<
     }
 }
 
+pub fn set_assistant(conn: &Connection, url: &str, model: &str, context: &str) -> AppResult<()> {
+    set(conn, ASSISTANT_URL, url)?;
+    set(conn, ASSISTANT_MODEL, model)?;
+    set(conn, ASSISTANT_CONTEXT, context)
+}
+
+pub fn set_assistant_key_set(conn: &Connection, on: bool) -> AppResult<()> {
+    set_flag(conn, ASSISTANT_KEY_SET, on)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -173,6 +210,9 @@ mod tests {
         assert!(!settings.backup.configured);
         assert!(settings.backup.auto);
         assert_eq!(settings.backup.auto_dir(), None);
+        assert_eq!(settings.assistant.url, DEFAULT_ASSISTANT_URL);
+        assert_eq!(settings.assistant.model, DEFAULT_ASSISTANT_MODEL);
+        assert!(settings.assistant.context.is_empty() && !settings.assistant.has_api_key);
     }
 
     #[test]

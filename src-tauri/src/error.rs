@@ -19,6 +19,9 @@ pub enum AppError {
     Keychain(String),
     #[error("{0}")]
     File(String),
+    /// The assistant's model server failed or couldn't be reached.
+    #[error("{0}")]
+    Network(String),
     #[error("Database error: {0}")]
     Database(rusqlite::Error),
 }
@@ -33,6 +36,7 @@ impl AppError {
             Self::Crypto(_) => "crypto",
             Self::Keychain(_) => "keychain",
             Self::File(_) => "file",
+            Self::Network(_) => "network",
             Self::Database(_) => "database",
         }
     }

@@ -17,7 +17,6 @@ use aes_gcm::{
     aead::{Aead, Generate, KeyInit, Payload},
 };
 use argon2::{Algorithm, Argon2, Params, Version};
-use objc2_foundation::{NSDate, NSDateFormatter, NSString};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
@@ -33,7 +32,7 @@ use crate::{
     },
     error::{AppError, AppResult},
     state::AppState,
-    time::now_millis,
+    time::{self, now_millis},
 };
 
 /// Emitted (no payload) after every backup attempt, so an open Settings refreshes its status.
@@ -582,9 +581,7 @@ pub fn restore(conn: &Connection, json: &[u8], key: &VaultKey) -> AppResult<()> 
 
 /// One file per day, in local time; later backups that day replace it.
 fn file_name() -> String {
-    let formatter = NSDateFormatter::new();
-    formatter.setDateFormat(Some(&NSString::from_str("yyyy-MM-dd")));
-    let today = formatter.stringFromDate(&NSDate::now());
+    let today = time::local_today("yyyy-MM-dd");
     format!("{FILE_PREFIX} {today}.{FILE_EXTENSION}")
 }
 

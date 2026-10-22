@@ -2,7 +2,15 @@ import { invoke } from "@tauri-apps/api/core";
 
 /** Mirrors `AppError` in `src-tauri/src/error.rs`. */
 export type ErrorKind =
-  "locked" | "notFound" | "invalid" | "auth" | "crypto" | "keychain" | "file" | "database";
+    | "locked"
+  | "notFound"
+  | "invalid"
+  | "auth"
+  | "crypto"
+  | "keychain"
+  | "file"
+  | "network"
+  | "database";
 
 export type AppError = { kind: ErrorKind; message: string };
 

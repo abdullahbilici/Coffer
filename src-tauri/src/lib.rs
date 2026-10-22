@@ -1,3 +1,4 @@
+mod assistant;
 mod auth;
 mod backup;
 mod clipboard;
