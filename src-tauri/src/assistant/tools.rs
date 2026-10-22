@@ -398,9 +398,10 @@ impl Tools<'_> {
         }
         let best = hits.iter().map(|h| h.0).max().unwrap_or(0);
         hits.retain(|h| h.0 == best);
-        hits.sort_by(|a, b| b.1.cmp(&a.1));
+        hits.sort_by_key(|hit| std::cmp::Reverse(hit.1));
         let total = hits.len();
-        let mut out = format!("{total} results for \"{query}\":");
+        let noun = if total == 1 { "result" } else { "results" };
+        let mut out = format!("{total} {noun} for \"{query}\":");
         for (_, _, line) in hits.iter().take(MAX_SEARCH_RESULTS) {
             out.push_str(&format!("\n- {line}"));
         }
@@ -866,7 +867,7 @@ mod tests {
     fn search_ranks_full_matches_and_quotes_text() {
         let conn = vault();
         let found = call(&conn, "search", json!({ "query": "panel url" }));
-        assert!(found.starts_with("1 results"), "{found}");
+        assert!(found.starts_with("1 result for"), "{found}");
         assert!(found.contains("text: \"URL: `https://panel.example.com`\""));
         let partial = call(&conn, "search", json!({ "query": "hosting zebra" }));
         assert!(partial.contains("folder 2: Hosting") && partial.contains("note 1"));

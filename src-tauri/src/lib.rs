@@ -19,8 +19,8 @@ mod time;
 use tauri::Manager;
 
 use commands::{
-    backup as backup_cmd, folders, items, payments, pins, projects, session as session_cmd,
-    settings, todos, vault,
+    assistant as assistant_cmd, backup as backup_cmd, folders, items, payments, pins, projects,
+    session as session_cmd, settings, todos, vault,
 };
 use state::AppState;
 
@@ -57,6 +57,15 @@ pub fn run() {
             settings::set_unlock_window,
             settings::set_clipboard_clear,
             settings::clear_clipboard_later,
+            assistant_cmd::save_assistant_settings,
+            assistant_cmd::assistant_models,
+            assistant_cmd::list_conversations,
+            assistant_cmd::get_conversation,
+            assistant_cmd::rename_conversation,
+            assistant_cmd::delete_conversation,
+            assistant_cmd::send_message,
+            assistant_cmd::cancel_reply,
+            assistant_cmd::reveal_handle,
             backup_cmd::vault_is_empty,
             backup_cmd::default_backup_dir,
             backup_cmd::suggest_passphrase,

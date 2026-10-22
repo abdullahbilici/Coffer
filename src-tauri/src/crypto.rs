@@ -2,7 +2,9 @@ use aes_gcm::{
     Aes256Gcm, Nonce,
     aead::{Aead, Generate, Key, KeyInit},
 };
-use security_framework::passwords::{get_generic_password, set_generic_password};
+use security_framework::passwords::{
+    delete_generic_password, get_generic_password, set_generic_password,
+};
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::error::{AppError, AppResult};
@@ -46,6 +48,20 @@ pub fn store_secret(account: &str, bytes: &[u8], label: &str) -> AppResult<()> {
     }
     set_generic_password(KEYCHAIN_SERVICE, account, bytes)
         .map_err(|e| AppError::Keychain(format!("Could not store {label}: {e}")))
+}
+
+/// Removes a Coffer Keychain item; a missing one is fine.
+pub fn delete_secret(account: &str, label: &str) -> AppResult<()> {
+    #[cfg(debug_assertions)]
+    if crate::dev::insecure() {
+        crate::dev::delete_secret(account);
+        return Ok(());
+    }
+    match delete_generic_password(KEYCHAIN_SERVICE, account) {
+        Ok(()) => Ok(()),
+        Err(e) if e.code() == ERR_SEC_ITEM_NOT_FOUND => Ok(()),
+        Err(e) => Err(AppError::Keychain(format!("Could not remove {label}: {e}"))),
+    }
 }
 
 fn crypto_error(message: &str) -> AppError {

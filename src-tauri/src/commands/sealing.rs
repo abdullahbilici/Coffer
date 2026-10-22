@@ -52,13 +52,19 @@ pub fn open_with(
     template: Option<&str>,
     sealed: &SecureBody,
 ) -> AppResult<Zeroizing<String>> {
-    let plaintext = crypto::decrypt(key, &sealed.nonce, &sealed.ciphertext)?;
     let Some(template) = template else {
-        return Ok(plaintext);
+        return crypto::decrypt(key, &sealed.nonce, &sealed.ciphertext);
     };
-    let spans: Zeroizing<Vec<String>> = Zeroizing::new(
-        serde_json::from_str(&plaintext)
-            .map_err(|_| AppError::Crypto("Corrupted secrets".to_string()))?,
-    );
-    Ok(Zeroizing::new(secrets::restore(template, &spans)))
+    Ok(Zeroizing::new(secrets::restore(
+        template,
+        &open_spans(key, sealed)?,
+    )))
+}
+
+/// The secret values sealed for a template, in marker order.
+pub fn open_spans(key: &VaultKey, sealed: &SecureBody) -> AppResult<Zeroizing<Vec<String>>> {
+    let plaintext = crypto::decrypt(key, &sealed.nonce, &sealed.ciphertext)?;
+    Ok(Zeroizing::new(serde_json::from_str(&plaintext).map_err(
+        |_| AppError::Crypto("Corrupted secrets".to_string()),
+    )?))
 }
