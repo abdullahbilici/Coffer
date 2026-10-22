@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Tag } from "lucide-react";
 import type { TreeEdit } from "../components/sidebar/ProjectTree";
+import { SettingsModal } from "../components/settings/SettingsModal";
 import { Sidebar } from "../components/sidebar/Sidebar";
 import { IconButton } from "../components/ui/IconButton";
 import { Toast } from "../components/ui/Toast";
@@ -11,14 +12,15 @@ import { ItemListView } from "../components/views/ItemListView";
 import { ItemView } from "../components/views/ItemView";
 import { LockScreen } from "../components/views/LockScreen";
 import { SearchView } from "../components/views/SearchView";
+import { useAppearance } from "../hooks/useAppearance";
 import { useExpansion } from "../hooks/useExpansion";
 import { useNavigation } from "../hooks/useNavigation";
 import { useSession } from "../hooks/useSession";
 import { useToast } from "../hooks/useToast";
 import { useVault } from "../hooks/useVault";
-import { errorMessage } from "../lib/api";
+import { api, errorMessage } from "../lib/api";
 import { hasTag } from "../lib/tags";
-import type { Run } from "./actions";
+import type { Copy, Run } from "./actions";
 import { useVaultActions } from "./useVaultActions";
 import styles from "./App.module.css";
 
@@ -30,6 +32,10 @@ export function App() {
   const nav = useNavigation(tree);
   const expansion = useExpansion(tree);
   const [treeEdit, setTreeEdit] = useState<TreeEdit | null>(null);
+  const [appearance, setAppearance] = useAppearance();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  /** Known before entering; an empty vault offers a restore on the launch screen. */
+  const [vaultEmpty, setVaultEmpty] = useState(false);
 
   const { show: showToast } = toast;
   const showError = useCallback((error: unknown) => showToast(errorMessage(error)), [showToast]);
@@ -44,9 +50,10 @@ export function App() {
     [showError],
   );
 
-  const copy = useCallback(
-    async (text: string) => {
+  const copy: Copy = useCallback(
+    async (text, secret = false) => {
       await navigator.clipboard.writeText(text);
+      if (secret) await api.clearClipboardLater();
       showToast("Copied to clipboard", "success");
     },
     [showToast],
@@ -63,18 +70,49 @@ export function App() {
     setTreeEdit,
   });
 
-  // Ask for Touch ID once on launch (StrictMode runs effects twice in dev).
+  // Ask for Touch ID once on launch (StrictMode runs effects twice in dev). An empty vault
+  // waits on the launch screen instead, which offers a restore.
   const prompted = useRef(false);
+  const { unlock } = session;
   useEffect(() => {
     if (prompted.current) return;
     prompted.current = true;
-    void run(session.unlock);
-  }, [run, session.unlock]);
+    void run(async () => {
+      const empty = await api.vaultIsEmpty();
+      setVaultEmpty(empty);
+      if (!empty) await unlock();
+    });
+  }, [run, unlock]);
+
+  const { select } = nav;
+  const restored = useCallback(async () => {
+    await reload();
+    select(null);
+    showToast("Vault restored", "success");
+  }, [reload, select, showToast]);
+
+  // Cmd+, opens Settings.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!event.metaKey || (event.code !== "Comma" && event.key !== ",")) return;
+      event.preventDefault();
+      setSettingsOpen(true);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  const closeSettings = useCallback(() => setSettingsOpen(false), []);
 
   if (!session.entered) {
     return (
       <>
-        <LockScreen onUnlock={() => run(session.unlock)} />
+        <LockScreen
+          onUnlock={() => run(session.unlock)}
+          canRestore={vaultEmpty}
+          run={run}
+          onRestored={restored}
+        />
         <Toast toast={toast.toast} onDismiss={toast.dismiss} />
       </>
     );
@@ -156,6 +194,7 @@ export function App() {
         onEdit={setTreeEdit}
         session={session}
         onLock={() => run(session.lock)}
+        onSettings={() => setSettingsOpen(true)}
         actions={actions}
       />
       <main className={styles.main}>
@@ -170,6 +209,17 @@ export function App() {
         </nav>
         {renderMain()}
       </main>
+      {settingsOpen && (
+        <SettingsModal
+          session={session}
+          run={run}
+          onCopy={copy}
+          appearance={appearance}
+          onAppearanceChange={setAppearance}
+          onRestored={restored}
+          onClose={closeSettings}
+        />
+      )}
       <Toast toast={toast.toast} onDismiss={toast.dismiss} />
     </div>
   );
