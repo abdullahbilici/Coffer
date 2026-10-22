@@ -127,5 +127,5 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 }
 
 export function emptyDraft(projectId: number, folderId: number | null): SaveItemInput {
-  return { id: null, projectId, folderId, title: "", body: "", secure: true, tags: [] };
+  return { id: null, projectId, folderId, title: "", body: "", secure: false, tags: [] };
 }
