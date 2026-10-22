@@ -82,12 +82,14 @@ button.row:hover {
   gap: var(--space-1) var(--space-3);
 }
 
-.monthTitle {
+/* Element-qualified to win over `groupTitle`, whose module loads later. The totals line up
+   with the amount column inside the bordered list; the month sits where other group titles do. */
+h2.monthTitle {
   display: flex;
   justify-content: space-between;
   width: 100%;
   margin-left: 0;
-  padding: 0 var(--space-4);
+  padding: 0 calc(var(--space-4) + 1px) 0 var(--space-1);
 }
 
 .monthTitle .totals {
