@@ -77,6 +77,12 @@ impl Session {
         ready
     }
 
+    /// Whether a timed window ends within `margin`; never true without a timer.
+    pub fn ends_within(&self, margin: Duration) -> bool {
+        self.expires_at
+            .is_some_and(|end| SystemTime::now() + margin >= end)
+    }
+
     pub fn mark_changed(&mut self) {
         self.changed_at = Some(Instant::now());
     }
@@ -140,6 +146,8 @@ mod tests {
 
         session.open_window(Zeroizing::new(vec![0; 32]), Some(Duration::from_secs(60)));
         assert!(session.require_unlocked().is_ok());
+        assert!(!session.ends_within(Duration::from_secs(30)));
+        assert!(session.ends_within(Duration::from_secs(60)));
         assert!(!session.take_changed(Duration::from_secs(60)));
         assert!(session.take_changed(Duration::ZERO));
         assert!(!session.take_changed(Duration::ZERO));
@@ -155,6 +163,7 @@ mod tests {
         let mut session = Session::default();
         let info = session.open_window(Zeroizing::new(vec![0; 32]), None);
         assert!(info.unlocked && info.expires_at.is_none());
+        assert!(!session.ends_within(Duration::from_secs(u32::MAX.into())));
         assert!(session.is_unlocked());
 
         let info = session.restart_window(Some(Duration::ZERO)).unwrap();

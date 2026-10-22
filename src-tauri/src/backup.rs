@@ -519,9 +519,11 @@ fn prepare(state: &AppState, trigger: Trigger) -> AppResult<Option<(Zeroizing<Ve
     };
 
     let mut session = state.session();
+    // Changes made just before a timed window ends are written at once: the worker's next
+    // round would find the key gone.
     let settled = match trigger {
-        Trigger::Auto => AUTO_DELAY,
-        Trigger::Flush | Trigger::Manual => Duration::ZERO,
+        Trigger::Auto if !session.ends_within(2 * AUTO_DELAY) => AUTO_DELAY,
+        _ => Duration::ZERO,
     };
     if !session.take_changed(settled) && trigger != Trigger::Manual {
         return Ok(None);
