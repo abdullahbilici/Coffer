@@ -5,7 +5,18 @@ export type Selection =
   | { kind: "item"; id: number }
   | { kind: "newItem"; projectId: number; folderId: number | null }
   | { kind: "tag"; path: string }
+  | { kind: "todos" }
+  | { kind: "payments" }
+  /** `id` null creates; `projectId` presets the project of a new one. */
+  | { kind: "todoEditor"; id: number | null; projectId: number | null }
+  | { kind: "paymentEditor"; id: number | null; projectId: number | null }
   | null;
+
+/** Editors aren't places to go back to. */
+export const isEditor = (selection: Selection): boolean =>
+  selection?.kind === "newItem" ||
+  selection?.kind === "todoEditor" ||
+  selection?.kind === "paymentEditor";
 
 /** Keys for expandable sidebar nodes. Everything starts collapsed. */
 export const nodeKey = {
@@ -13,6 +24,12 @@ export const nodeKey = {
   folder: (id: number) => `folder:${id}`,
   item: (id: number) => `item:${id}`,
   tag: (path: string) => `tag:${path}`,
+};
+
+/** Keys for agenda rows animating out (see `deleting` in `useVaultActions`). */
+export const agendaKey = {
+  todo: (id: number) => `todo:${id}`,
+  payment: (id: number) => `payment:${id}`,
 };
 
 export type TreeSection = "projects" | "tags";

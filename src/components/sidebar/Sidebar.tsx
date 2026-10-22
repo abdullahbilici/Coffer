@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef } from "react";
-import { ChevronsDownUp, Plus, Search, X } from "lucide-react";
+import { ChevronsDownUp, ListTodo, Plus, Search, Wallet, X, type LucideIcon } from "lucide-react";
 import type { VaultActions } from "../../app/actions";
 import type { Session } from "../../hooks/useSession";
 import type { Tree } from "../../lib/api";
 import type { Selection, TreeSection } from "../../lib/selection";
+import { cx } from "../../lib/cx";
+import { today } from "../../lib/dates";
 import { pinnedSet } from "../../lib/pins";
 import { buildTagTree } from "../../lib/tags";
 import { buildProjectTree } from "../../lib/tree";
@@ -44,6 +46,10 @@ export function Sidebar(props: Props) {
   const projectNodes = useMemo(() => buildProjectTree(tree), [tree]);
   const tagNodes = useMemo(() => buildTagTree(tree.items), [tree.items]);
   const isPinned = useMemo(() => pinnedSet(tree), [tree]);
+  const now = today();
+  const dueTodos = tree.todos.filter(
+    (t) => !t.done && t.dueDate !== null && t.dueDate <= now,
+  ).length;
 
   // Cmd+K or Cmd+F focuses search.
   useEffect(() => {
@@ -79,6 +85,22 @@ export function Sidebar(props: Props) {
           <Kbd letter="K" />
         )}
       </div>
+
+      <nav className={styles.places} aria-label="Agenda">
+        <PlaceRow
+          icon={ListTodo}
+          label="Todos"
+          selected={selection?.kind === "todos"}
+          count={dueTodos}
+          onClick={actions.selectTodos}
+        />
+        <PlaceRow
+          icon={Wallet}
+          label="Payments"
+          selected={selection?.kind === "payments"}
+          onClick={actions.selectPayments}
+        />
+      </nav>
 
       <SplitPanes
         panes={[
@@ -163,5 +185,29 @@ function CollapseAll({ section, onCollapseAll }: Props & { section: TreeSection 
       size="sm"
       onClick={() => onCollapseAll(section)}
     />
+  );
+}
+
+type PlaceRowProps = {
+  icon: LucideIcon;
+  label: string;
+  selected: boolean;
+  /** Open todos due today or earlier. */
+  count?: number;
+  onClick: () => void;
+};
+
+function PlaceRow({ icon: Icon, label, selected, count, onClick }: PlaceRowProps) {
+  return (
+    <button
+      type="button"
+      className={cx(styles.place, selected && styles.placeSelected)}
+      aria-current={selected ? "page" : undefined}
+      onClick={onClick}
+    >
+      <Icon size={16} strokeWidth={1.75} className={styles.placeIcon} />
+      <span className={styles.placeLabel}>{label}</span>
+      {count !== undefined && count > 0 && <span className={styles.placeCount}>{count}</span>}
+    </button>
   );
 }

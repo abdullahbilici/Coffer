@@ -3,9 +3,16 @@ import type { TreeEdit } from "../components/sidebar/ProjectTree";
 import type { useExpansion } from "../hooks/useExpansion";
 import type { useNavigation } from "../hooks/useNavigation";
 import type { Session } from "../hooks/useSession";
-import { api, type ItemSummary, type SaveItemInput, type Tree } from "../lib/api";
+import {
+  api,
+  type ItemSummary,
+  type SaveItemInput,
+  type SavePaymentInput,
+  type SaveTodoInput,
+  type Tree,
+} from "../lib/api";
 import { motion } from "../lib/motion";
-import { nodeKey } from "../lib/selection";
+import { agendaKey, nodeKey } from "../lib/selection";
 import type { Run, VaultActions } from "./actions";
 
 type Deps = {
@@ -32,7 +39,7 @@ export function useVaultActions({
 }: Deps) {
   /** Tree node keys closing before they are deleted (see `nodeKey`). */
   const [deleting, setDeleting] = useState<ReadonlySet<string>>(() => new Set());
-  const { select, setSelection } = nav;
+  const { select, setSelection, back } = nav;
   const { expandTo } = expansion;
 
   /** Runs a change behind the unlock window, reloads the tree, then `then` with the result. */
@@ -57,8 +64,9 @@ export function useVaultActions({
   );
 
   /**
-   * Deletes after the tree row (and its open children) has closed. Touch ID comes first, so a
-   * cancelled prompt never starts the animation; a failed delete brings the row back.
+   * Removes a row after it has closed: a deleted tree branch, or a todo leaving its list. Touch
+   * ID comes first, so a cancelled prompt never starts the animation; a failure brings the row
+   * back.
    */
   const deleteWithExit = useCallback(
     async (key: string, remove: () => Promise<void>) => {
@@ -100,6 +108,21 @@ export function useVaultActions({
       }
     },
     [session, reload, openItem, showError],
+  );
+
+  /** Saves from an editor page, then returns to where the editor was opened from. */
+  const saveFromEditor = useCallback(
+    async (save: () => Promise<unknown>) => {
+      try {
+        await session.withUnlock(save);
+        await reload();
+        back();
+      } catch (error) {
+        showError(error);
+        throw error;
+      }
+    },
+    [session, reload, back, showError],
   );
 
   const actions: VaultActions = useMemo(
@@ -161,6 +184,23 @@ export function useVaultActions({
           await deleteWithExit(nodeKey.item(id), () => api.deleteItem(id));
           setSelection((s) => (s?.kind === "item" && s.id === id ? null : s));
         }),
+
+      selectTodos: () => select({ kind: "todos" }),
+      editTodo: (id, projectId) => guarded(() => select({ kind: "todoEditor", id, projectId })),
+      saveTodo: (input: SaveTodoInput) => saveFromEditor(() => api.saveTodo(input)),
+      setTodoDone: (id, done) =>
+        run(() => deleteWithExit(agendaKey.todo(id), () => api.setTodoDone(id, done))),
+      deleteTodo: (id) => run(() => deleteWithExit(agendaKey.todo(id), () => api.deleteTodo(id))),
+
+      selectPayments: () => select({ kind: "payments" }),
+      editPayment: (id, projectId) =>
+        guarded(() => select({ kind: "paymentEditor", id, projectId })),
+      savePayment: (input: SavePaymentInput) => saveFromEditor(() => api.savePayment(input)),
+      deletePayment: (id) =>
+        run(async () => {
+          await deleteWithExit(agendaKey.payment(id), () => api.deletePayment(id));
+          back();
+        }),
     }),
     [
       tree,
@@ -173,6 +213,8 @@ export function useVaultActions({
       openItem,
       expandTo,
       setTreeEdit,
+      saveFromEditor,
+      back,
     ],
   );
 

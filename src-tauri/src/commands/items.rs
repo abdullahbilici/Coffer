@@ -39,6 +39,16 @@ pub fn reveal_item(state: State<AppState>, id: i64) -> AppResult<String> {
 }
 
 #[tauri::command]
+pub fn search_item_bodies(state: State<AppState>, query: String) -> AppResult<Vec<i64>> {
+    state.session().require_entered()?;
+    let query = query.trim();
+    if query.is_empty() {
+        return Ok(Vec::new());
+    }
+    items::search_bodies(&state.db(), query)
+}
+
+#[tauri::command]
 pub fn save_item(state: State<AppState>, input: SaveItemInput) -> AppResult<ItemSummary> {
     state.session().require_unlocked()?;
     let title = required_name(&input.title, "Title")?;

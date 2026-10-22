@@ -29,7 +29,7 @@ use crate::{
     db::{
         items::Body,
         settings,
-        vault::{self, FolderRow, ItemRow, ProjectRow, VaultRows},
+        vault::{self, FolderRow, ItemRow, PaymentRow, ProjectRow, TodoRow, VaultRows},
     },
     error::{AppError, AppResult},
     state::AppState,
@@ -47,7 +47,8 @@ const NONCE_LEN: usize = 12;
 /// Magic, version, three u32 KDF parameters, salt, nonce. Authenticated as AAD.
 const HEADER_LEN: usize = MAGIC.len() + 1 + 12 + SALT_LEN + NONCE_LEN;
 /// Bumped when the snapshot JSON changes shape; older readers refuse newer snapshots.
-const SNAPSHOT_FORMAT: u32 = 1;
+/// 2 added todos and payments (missing in format 1 files, read as none).
+const SNAPSHOT_FORMAT: u32 = 2;
 
 /// 64 MiB, 3 passes: about a third of a second on Apple silicon.
 const KDF: KdfParams = KdfParams {
@@ -263,6 +264,10 @@ struct Snapshot {
     projects: Vec<ProjectData>,
     folders: Vec<FolderData>,
     items: Vec<ItemData>,
+    #[serde(default)]
+    todos: Vec<TodoData>,
+    #[serde(default)]
+    payments: Vec<PaymentData>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -302,6 +307,43 @@ struct ItemData {
     pin_order: Option<i64>,
     created_at: i64,
     updated_at: i64,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TodoData {
+    id: i64,
+    project_id: Option<i64>,
+    item_id: Option<i64>,
+    title: String,
+    /// The full description, secrets included.
+    description: Zeroizing<String>,
+    due_date: Option<String>,
+    done: bool,
+    created_at: i64,
+    updated_at: i64,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PaymentData {
+    id: i64,
+    project_id: Option<i64>,
+    name: String,
+    currency: String,
+    cycle: String,
+    start_date: String,
+    cancel_date: Option<String>,
+    prices: Vec<PriceData>,
+    created_at: i64,
+    updated_at: i64,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PriceData {
+    from: String,
+    amount: i64,
 }
 
 /// The whole vault, decrypted, as JSON.
@@ -362,12 +404,55 @@ fn export(conn: &Connection, key: &VaultKey) -> AppResult<Zeroizing<Vec<u8>>> {
             })
         })
         .collect::<AppResult<_>>()?;
+    let todos = rows
+        .todos
+        .into_iter()
+        .map(|t| {
+            let description = match &t.secrets {
+                Some(sealed) => open_with(key, Some(&t.description), sealed)?,
+                None => Zeroizing::new(t.description),
+            };
+            Ok(TodoData {
+                id: t.id,
+                project_id: t.project_id,
+                item_id: t.item_id,
+                title: t.title,
+                description,
+                due_date: t.due_date,
+                done: t.done,
+                created_at: t.created_at,
+                updated_at: t.updated_at,
+            })
+        })
+        .collect::<AppResult<_>>()?;
+    let payments = rows
+        .payments
+        .into_iter()
+        .map(|p| PaymentData {
+            id: p.id,
+            project_id: p.project_id,
+            name: p.name,
+            currency: p.currency,
+            cycle: p.cycle,
+            start_date: p.start_date,
+            cancel_date: p.cancel_date,
+            prices: p
+                .prices
+                .into_iter()
+                .map(|(from, amount)| PriceData { from, amount })
+                .collect(),
+            created_at: p.created_at,
+            updated_at: p.updated_at,
+        })
+        .collect();
 
     let snapshot = Snapshot {
         format: SNAPSHOT_FORMAT,
         projects,
         folders,
         items,
+        todos,
+        payments,
     };
     Ok(Zeroizing::new(
         serde_json::to_vec(&snapshot).expect("a snapshot always serializes"),
@@ -439,10 +524,54 @@ fn import(json: &[u8], key: &VaultKey) -> AppResult<VaultRows> {
             })
         })
         .collect::<AppResult<_>>()?;
+    let todos = snapshot
+        .todos
+        .into_iter()
+        .map(|t| {
+            let (description, secrets) = match seal_inline_with(key, &t.description)? {
+                Some((template, sealed)) => (template, Some(sealed)),
+                None => (t.description.to_string(), None),
+            };
+            Ok(TodoRow {
+                id: t.id,
+                project_id: t.project_id,
+                item_id: t.item_id,
+                title: t.title,
+                description,
+                secrets,
+                due_date: t.due_date,
+                done: t.done,
+                created_at: t.created_at,
+                updated_at: t.updated_at,
+            })
+        })
+        .collect::<AppResult<_>>()?;
+    let payments = snapshot
+        .payments
+        .into_iter()
+        .map(|p| PaymentRow {
+            id: p.id,
+            project_id: p.project_id,
+            name: p.name,
+            currency: p.currency,
+            cycle: p.cycle,
+            start_date: p.start_date,
+            cancel_date: p.cancel_date,
+            prices: p
+                .prices
+                .into_iter()
+                .map(|pr| (pr.from, pr.amount))
+                .collect(),
+            created_at: p.created_at,
+            updated_at: p.updated_at,
+        })
+        .collect();
     Ok(VaultRows {
         projects,
         folders,
         items,
+        todos,
+        payments,
     })
 }
 
@@ -562,7 +691,10 @@ mod tests {
     use super::*;
     use crate::db::{
         items::{self, ItemRecord},
-        open_in_memory, projects,
+        open_in_memory,
+        payments::{self, PaymentRecord},
+        projects,
+        todos::{self, TodoRecord},
     };
 
     /// Cheap parameters so tests stay fast; real backups use `KDF`.
@@ -609,6 +741,35 @@ mod tests {
             )
             .unwrap();
         }
+        let (template, sealed) = seal_inline_with(key, "pin `!4321!`").unwrap().unwrap();
+        let secret_todo = TodoRecord {
+            project_id: Some(project),
+            item_id: Some(2),
+            title: "Rotate key",
+            description: &template,
+            secrets: Some(&sealed),
+            due_date: Some("2026-11-01"),
+        };
+        let general_todo = TodoRecord {
+            project_id: None,
+            item_id: None,
+            title: "Renew passport",
+            description: "",
+            secrets: None,
+            due_date: None,
+        };
+        todos::insert(&conn, &secret_todo, 4).unwrap();
+        todos::insert(&conn, &general_todo, 4).unwrap();
+        let payment = PaymentRecord {
+            project_id: None,
+            name: "Hosting",
+            currency: "USD",
+            cycle: "monthly",
+            start_date: "2026-01-15",
+            cancel_date: None,
+        };
+        let id = payments::insert(&conn, &payment, 1000, 5).unwrap();
+        payments::update(&conn, id, &payment, Some(("2026-06-15", 1500)), 6).unwrap();
         conn
     }
 
@@ -642,6 +803,10 @@ mod tests {
         // Secrets are sealed again, never stored as plain text.
         let plain = items::get(&target, 2).unwrap().body.unwrap();
         assert_eq!(plain, "token `!0!`");
+        let todos = todos::list(&target).unwrap();
+        assert_eq!(todos.len(), 2);
+        assert_eq!(todos[0].description, "pin `!0!`");
+        assert_eq!(payments::list(&target).unwrap()[0].prices.len(), 2);
     }
 
     #[test]

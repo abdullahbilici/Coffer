@@ -1,0 +1,41 @@
+.root {
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-1);
+  padding: 3px;
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-subtle);
+}
+
+.option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  transition:
+    background var(--duration-base) var(--ease-out),
+    color var(--duration-base) var(--ease-out),
+    box-shadow var(--duration-base) var(--ease-out);
+}
+
+.option:hover {
+  color: var(--color-text);
+}
+
+.option[aria-checked="true"] {
+  background: var(--color-bg-elevated);
+  box-shadow: var(--shadow-raised);
+  color: var(--color-text);
+}
+
+.count {
+  color: var(--color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+}

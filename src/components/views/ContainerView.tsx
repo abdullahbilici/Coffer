@@ -1,4 +1,4 @@
-import { FilePlus, Folder, FolderPlus, LayoutGrid, List, Pencil } from "lucide-react";
+import { FilePlus, Folder, FolderPlus, LayoutGrid, List, ListPlus, Pencil } from "lucide-react";
 import type { Copy, Run, VaultActions } from "../../app/actions";
 import type { Session } from "../../hooks/useSession";
 import { useProjectOverview, type Overview } from "../../hooks/useProjectOverview";
@@ -15,6 +15,7 @@ import { Breadcrumb, pathCrumbs } from "./Breadcrumb";
 import { EntryList, type Entry } from "./EntryList";
 import { FolderGrid } from "./FolderGrid";
 import { ProjectOverview } from "./ProjectOverview";
+import { TodoList } from "./TodoList";
 import styles from "./ContainerView.module.css";
 import viewStyles from "./View.module.css";
 
@@ -40,11 +41,13 @@ type Props = {
   actions: VaultActions;
   session: Session;
   onCopy: Copy;
+  /** Todo rows closing before they leave the list. */
+  deleting: ReadonlySet<string>;
 };
 
 /**
- * A project or folder: breadcrumb, then for a project root its markdown overview, then its
- * subfolders as tiles, then its notes as a list.
+ * A project or folder: breadcrumb, then for a project root its markdown overview and open
+ * todos, then its subfolders as tiles, then its notes as a list.
  */
 export function ContainerView(props: Props) {
   return props.folderId === null ? (
@@ -59,13 +62,8 @@ function ProjectRoot(props: Props) {
   return <Container {...props} overview={overview} />;
 }
 
-function Container({
-  projectId,
-  folderId,
-  tree,
-  actions,
-  overview,
-}: Props & { overview: Overview | null }) {
+function Container(props: Props & { overview: Overview | null }) {
+  const { projectId, folderId, tree, actions, overview } = props;
   const [view, setView] = useStoredState<ContentsView>("coffer.contents.view", "grid");
   const [sort, setSort] = useStoredState<SortOrder>("coffer.contents.sort", "name");
   const project = tree.projects.find((p) => p.id === projectId);
@@ -74,6 +72,7 @@ function Container({
   if (!project || (folderId !== null && !folder)) return null;
 
   const isPinned = pinnedSet(tree);
+  const todos = overview ? tree.todos.filter((t) => t.projectId === projectId && !t.done) : [];
   const items = sortItems(
     tree.items.filter((i) => i.projectId === projectId && i.folderId === folderId),
     sort,
@@ -137,6 +136,16 @@ function Container({
                 {overview.readme ? "Edit overview" : "Write overview"}
               </Button>
             )}
+            {overview && (
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={ListPlus}
+                onClick={() => actions.editTodo(null, projectId)}
+              >
+                New todo
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"
@@ -157,6 +166,21 @@ function Container({
         </header>
 
         {overview && <ProjectOverview overview={overview} />}
+
+        {todos.length > 0 && (
+          <section className={styles.todos} aria-label="Todos">
+            <h2 className={styles.sectionTitle}>Todos</h2>
+            <TodoList
+              todos={todos}
+              tree={tree}
+              session={props.session}
+              run={props.run}
+              actions={actions}
+              onCopy={props.onCopy}
+              deleting={props.deleting}
+            />
+          </section>
+        )}
 
         {/* One tray for everything inside this project or folder, so it reads as its contents. */}
         <section className={styles.contents} aria-label="Contents">

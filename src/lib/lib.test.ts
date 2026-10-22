@@ -91,6 +91,8 @@ describe("tree", () => {
     folders: [folder(1, null, "Infra"), folder(2, 1, "AWS")],
     items: [],
     pins: [],
+    todos: [],
+    payments: [],
   } as Tree;
 
   it("walks a folder up to the project root", () => {

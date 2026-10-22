@@ -74,6 +74,24 @@ pub fn restore(template: &str, secrets: &[String]) -> String {
     body
 }
 
+/// A template with its `` `!n!` `` markers removed: the text anyone can read without a key.
+pub fn strip_markers(template: &str) -> String {
+    let mut text = String::with_capacity(template.len());
+    let mut last = 0;
+    let mut from = 0;
+    while let Some((start, end)) = next_span(template, from) {
+        let is_marker =
+            as_secret(&template[start..end]).is_some_and(|index| index.parse::<usize>().is_ok());
+        if is_marker {
+            text.push_str(&template[last..start - 1]);
+            last = end + 1;
+        }
+        from = end + 1;
+    }
+    text.push_str(&template[last..]);
+    text
+}
+
 /// Rewrites the `{{n}}` markers used before migration 3 into `` `!n!` ``.
 pub fn upgrade_legacy_markers(template: &str) -> String {
     let mut out = String::with_capacity(template.len());
@@ -139,6 +157,14 @@ mod tests {
         let (template, secrets) = extract(body);
         assert_eq!(template, body);
         assert!(secrets.is_empty());
+    }
+
+    #[test]
+    fn strips_markers_but_keeps_other_spans() {
+        assert_eq!(
+            strip_markers("pass: `!0!` user: `apo` note `!x!` end`!12!`"),
+            "pass:  user: `apo` note `!x!` end"
+        );
     }
 
     #[test]

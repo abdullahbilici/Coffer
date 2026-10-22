@@ -1,0 +1,105 @@
+.list {
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-elevated);
+  list-style: none;
+  overflow: hidden;
+}
+
+.list > li + li {
+  border-top: 1px solid var(--color-border);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  width: 100%;
+  min-height: 40px;
+  padding: var(--space-2) var(--space-4);
+  border: none;
+  background: transparent;
+  text-align: left;
+}
+
+button.row {
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+button.row:hover {
+  background: var(--color-bg-hover);
+}
+
+.date {
+  flex-shrink: 0;
+  width: 64px;
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.secondary {
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--text-sm);
+}
+
+.amount {
+  flex-shrink: 0;
+  min-width: 96px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.ended .name,
+.ended .amount {
+  color: var(--color-text-tertiary);
+}
+
+.totalRow {
+  background: var(--color-bg-subtle);
+}
+
+.totalRow .name {
+  font-weight: 650;
+}
+
+/* Several currencies side by side, never converted into one. */
+.totals {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-1) var(--space-3);
+}
+
+/* Element-qualified to win over `groupTitle`, whose module loads later. The totals line up
+   with the amount column inside the bordered list; the month sits where other group titles do. */
+h2.monthTitle {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  margin-left: 0;
+  padding: 0 calc(var(--space-4) + 1px) 0 var(--space-1);
+}
+
+.monthTitle .totals {
+  color: var(--color-text-tertiary);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--space-3);
+}

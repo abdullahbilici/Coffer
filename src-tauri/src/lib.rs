@@ -18,7 +18,8 @@ mod time;
 use tauri::Manager;
 
 use commands::{
-    backup as backup_cmd, folders, items, pins, projects, session as session_cmd, settings, vault,
+    backup as backup_cmd, folders, items, payments, pins, projects, session as session_cmd,
+    settings, todos, vault,
 };
 use state::AppState;
 
@@ -80,6 +81,13 @@ pub fn run() {
             items::move_item,
             items::duplicate_item,
             items::delete_item,
+            items::search_item_bodies,
+            todos::save_todo,
+            todos::reveal_todo,
+            todos::set_todo_done,
+            todos::delete_todo,
+            payments::save_payment,
+            payments::delete_payment,
             pins::set_pinned,
             pins::reorder_pins,
         ])
