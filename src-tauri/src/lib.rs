@@ -29,18 +29,6 @@ fn db_file() -> String {
     "coffer.db".to_string()
 }
 
-/// Dev builds can use another vault file via `COFFER_DEV_DB`, e.g. to run two branches side by
-/// side without sharing data.
-fn db_file() -> String {
-    #[cfg(debug_assertions)]
-    if let Ok(name) = std::env::var("COFFER_DEV_DB")
-        && !name.is_empty()
-    {
-        return name;
-    }
-    DB_FILE.to_string()
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
