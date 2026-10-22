@@ -26,6 +26,10 @@ pub fn load_or_create_key() -> AppResult<VaultKey> {
 
 /// Reads a Coffer Keychain item; `None` if it doesn't exist. `label` names it in errors.
 pub fn load_secret(account: &str, label: &str) -> AppResult<Option<Zeroizing<Vec<u8>>>> {
+    #[cfg(debug_assertions)]
+    if crate::dev::insecure() {
+        return Ok(crate::dev::load_secret(account));
+    }
     match get_generic_password(KEYCHAIN_SERVICE, account) {
         Ok(bytes) => Ok(Some(Zeroizing::new(bytes))),
         Err(e) if e.code() == ERR_SEC_ITEM_NOT_FOUND => Ok(None),
@@ -35,6 +39,11 @@ pub fn load_secret(account: &str, label: &str) -> AppResult<Option<Zeroizing<Vec
 
 /// Creates or replaces a Coffer Keychain item.
 pub fn store_secret(account: &str, bytes: &[u8], label: &str) -> AppResult<()> {
+    #[cfg(debug_assertions)]
+    if crate::dev::insecure() {
+        crate::dev::store_secret(account, bytes);
+        return Ok(());
+    }
     set_generic_password(KEYCHAIN_SERVICE, account, bytes)
         .map_err(|e| AppError::Keychain(format!("Could not store {label}: {e}")))
 }
