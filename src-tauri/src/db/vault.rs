@@ -1,5 +1,7 @@
 //! The whole vault as stored rows (still sealed), for backups and restores.
 
+use std::collections::HashMap;
+
 use rusqlite::{Connection, params};
 
 use super::{
@@ -40,11 +42,41 @@ pub struct ItemRow {
     pub updated_at: i64,
 }
 
+pub struct TodoRow {
+    pub id: i64,
+    pub project_id: Option<i64>,
+    pub item_id: Option<i64>,
+    pub title: String,
+    /// With `secrets`, a `` `!0!` ``-marker template.
+    pub description: String,
+    pub secrets: Option<SecureBody>,
+    pub due_date: Option<String>,
+    pub done: bool,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+pub struct PaymentRow {
+    pub id: i64,
+    pub project_id: Option<i64>,
+    pub name: String,
+    pub currency: String,
+    pub cycle: String,
+    pub start_date: String,
+    pub cancel_date: Option<String>,
+    /// (effective date, amount), oldest first.
+    pub prices: Vec<(String, i64)>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
 #[derive(Default)]
 pub struct VaultRows {
     pub projects: Vec<ProjectRow>,
     pub folders: Vec<FolderRow>,
     pub items: Vec<ItemRow>,
+    pub todos: Vec<TodoRow>,
+    pub payments: Vec<PaymentRow>,
 }
 
 fn sealed(nonce: Option<Vec<u8>>, ciphertext: Option<Vec<u8>>) -> Option<SecureBody> {
@@ -133,19 +165,83 @@ pub fn dump(conn: &Connection) -> AppResult<VaultRows> {
         });
     }
 
+    let todos = conn
+        .prepare(
+            "SELECT id, project_id, item_id, title, description, nonce, ciphertext, due_date, done,
+             created_at, updated_at FROM todos ORDER BY id",
+        )?
+        .query_map([], |row| {
+            Ok(TodoRow {
+                id: row.get("id")?,
+                project_id: row.get("project_id")?,
+                item_id: row.get("item_id")?,
+                title: row.get("title")?,
+                description: row.get("description")?,
+                secrets: sealed(row.get("nonce")?, row.get("ciphertext")?),
+                due_date: row.get("due_date")?,
+                done: row.get("done")?,
+                created_at: row.get("created_at")?,
+                updated_at: row.get("updated_at")?,
+            })
+        })?
+        .collect::<Result<_, _>>()?;
+
+    let mut prices: HashMap<i64, Vec<(String, i64)>> = HashMap::new();
+    let mut stmt = conn.prepare(
+        "SELECT payment_id, effective_date, amount FROM payment_prices ORDER BY effective_date",
+    )?;
+    let mut rows = stmt.query([])?;
+    while let Some(row) = rows.next()? {
+        prices
+            .entry(row.get("payment_id")?)
+            .or_default()
+            .push((row.get("effective_date")?, row.get("amount")?));
+    }
+    let payments = conn
+        .prepare(
+            "SELECT id, project_id, name, currency, cycle, start_date, cancel_date, created_at,
+             updated_at FROM payments ORDER BY id",
+        )?
+        .query_map([], |row| {
+            Ok(PaymentRow {
+                id: row.get("id")?,
+                project_id: row.get("project_id")?,
+                name: row.get("name")?,
+                currency: row.get("currency")?,
+                cycle: row.get("cycle")?,
+                start_date: row.get("start_date")?,
+                cancel_date: row.get("cancel_date")?,
+                prices: Vec::new(),
+                created_at: row.get("created_at")?,
+                updated_at: row.get("updated_at")?,
+            })
+        })?
+        .map(|row| {
+            let mut payment = row?;
+            payment.prices = prices.remove(&payment.id).unwrap_or_default();
+            Ok(payment)
+        })
+        .collect::<Result<_, rusqlite::Error>>()?;
+
     Ok(VaultRows {
         projects,
         folders,
         items,
+        todos,
+        payments,
     })
 }
 
-/// Replaces every project, folder and item with `rows`, keeping their ids, in one transaction.
+/// Replaces every project, folder, item, todo and payment with `rows`, keeping their ids, in one
+/// transaction.
 pub fn replace(conn: &Connection, rows: &VaultRows) -> AppResult<()> {
     let tx = conn.unchecked_transaction()?;
     // Folders may reference parents inserted after them; check references at commit instead.
     tx.pragma_update(None, "defer_foreign_keys", true)?;
-    // Cascades to folders, items and tags.
+    // General todos and personal payments belong to no project, so the cascade misses them.
+    tx.execute("DELETE FROM todos", [])?;
+    tx.execute("DELETE FROM payments", [])?;
+    // Cascades to folders, items, tags and project todos and payments.
     tx.execute("DELETE FROM projects", [])?;
 
     for p in &rows.projects {
@@ -204,6 +300,51 @@ pub fn replace(conn: &Connection, rows: &VaultRows) -> AppResult<()> {
         }
     }
     drop(tag_stmt);
+    for t in &rows.todos {
+        let secrets = t.secrets.as_ref();
+        tx.execute(
+            "INSERT INTO todos (id, project_id, item_id, title, description, nonce, ciphertext,
+             due_date, done, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            params![
+                t.id,
+                t.project_id,
+                t.item_id,
+                t.title,
+                t.description,
+                secrets.map(|s| &s.nonce),
+                secrets.map(|s| &s.ciphertext),
+                t.due_date,
+                t.done,
+                t.created_at,
+                t.updated_at
+            ],
+        )?;
+    }
+    let mut price_stmt = tx.prepare(
+        "INSERT INTO payment_prices (payment_id, effective_date, amount) VALUES (?1, ?2, ?3)",
+    )?;
+    for p in &rows.payments {
+        tx.execute(
+            "INSERT INTO payments (id, project_id, name, currency, cycle, start_date, cancel_date,
+             created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![
+                p.id,
+                p.project_id,
+                p.name,
+                p.currency,
+                p.cycle,
+                p.start_date,
+                p.cancel_date,
+                p.created_at,
+                p.updated_at
+            ],
+        )?;
+        for (from, amount) in &p.prices {
+            price_stmt.execute(params![p.id, from, amount])?;
+        }
+    }
+    drop(price_stmt);
     tx.commit()?;
     Ok(())
 }
