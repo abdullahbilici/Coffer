@@ -3,6 +3,9 @@ import type { ItemSummary, PinRef, SavePaymentInput, SaveTodoInput } from "../li
 /** Runs an async action and reports failures as a toast. */
 export type Run = (action: () => Promise<unknown>) => Promise<void>;
 
+/** Writes to the clipboard and confirms with a toast. A copied secret is cleared later. */
+export type Copy = (text: string, secret?: boolean) => Promise<void>;
+
 /** Mutations and navigation the sidebar and views can trigger. Implemented in `App`. */
 export type VaultActions = {
   selectProject: (id: number) => void;

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { Copy, Eye, EyeOff, LockKeyhole } from "lucide-react";
-import type { Run } from "../../app/actions";
+import { Copy as CopyIcon, Eye, EyeOff, LockKeyhole } from "lucide-react";
+import type { Copy, Run } from "../../app/actions";
 import { useSecrets } from "../../hooks/useSecrets";
 import type { Session } from "../../hooks/useSession";
 import { api, type Item } from "../../lib/api";
@@ -14,7 +14,7 @@ type Props = {
   session: Session;
   run: Run;
   /** Writes to the clipboard and confirms with a toast. */
-  onCopy: (text: string) => Promise<void>;
+  onCopy: Copy;
   /** Shown at the left of the toolbar on the note page; previews omit it. */
   title?: ReactNode;
 };
@@ -57,7 +57,7 @@ export function ItemBody({ item, session, run, onCopy, title }: Props) {
             {bodyHidden ? "Unhide" : "Hide"}
           </Button>
         )}
-        <Button variant="ghost" size="sm" icon={Copy} onClick={copyAll}>
+        <Button variant="ghost" size="sm" icon={CopyIcon} onClick={copyAll}>
           Copy all
         </Button>
       </div>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ArrowRight, ChevronDown, Circle, CircleCheck, FileText, Pencil } from "lucide-react";
-import type { Run, VaultActions } from "../../app/actions";
+import type { Copy, Run, VaultActions } from "../../app/actions";
 import { useSecrets } from "../../hooks/useSecrets";
 import type { Session } from "../../hooks/useSession";
 import { api, type Todo, type Tree } from "../../lib/api";
@@ -20,7 +20,7 @@ type Props = {
   session: Session;
   run: Run;
   actions: VaultActions;
-  onCopy: (text: string) => Promise<void>;
+  onCopy: Copy;
   /** Row keys closing before they leave the list (`agendaKey.todo`). */
   deleting: ReadonlySet<string>;
 };
@@ -142,7 +142,7 @@ type DescriptionProps = {
   todo: Todo;
   session: Session;
   run: Run;
-  onCopy: (text: string) => Promise<void>;
+  onCopy: Copy;
 };
 
 /** Rendered like a note body: markdown with chips, secrets masked until unhidden. */

@@ -2,14 +2,33 @@ import { invoke } from "@tauri-apps/api/core";
 
 /** Mirrors `AppError` in `src-tauri/src/error.rs`. */
 export type ErrorKind =
-  "locked" | "notFound" | "invalid" | "auth" | "crypto" | "keychain" | "database";
+  "locked" | "notFound" | "invalid" | "auth" | "crypto" | "keychain" | "file" | "database";
 
 export type AppError = { kind: ErrorKind; message: string };
 
 export type SessionInfo = {
   entered: boolean;
-  /** Unix millis when the unlock window ends, if one is open. */
+  unlocked: boolean;
+  /** Unix millis when the unlock window ends; `null` while locked or with no timer. */
   expiresAt: number | null;
+};
+
+export type BackupSettings = {
+  /** A backup passphrase has been set. */
+  configured: boolean;
+  auto: boolean;
+  dir: string | null;
+  lastAt: number | null;
+  lastError: string | null;
+};
+
+/** Mirrors `db::settings::Settings`. */
+export type Settings = {
+  /** `null`: until the screen locks. */
+  unlockWindowSecs: number | null;
+  /** `null`: never. */
+  clipboardClearSecs: number | null;
+  backup: BackupSettings;
 };
 
 export type ProjectSummary = { id: number; name: string };
@@ -152,6 +171,22 @@ export const api = {
   sessionInfo: () => invoke<SessionInfo>("session_info"),
   unlock: () => invoke<SessionInfo>("unlock"),
   lock: () => invoke<SessionInfo>("lock"),
+
+  getSettings: () => invoke<Settings>("get_settings"),
+  setUnlockWindow: (secs: number | null) => invoke<SessionInfo>("set_unlock_window", { secs }),
+  setClipboardClear: (secs: number | null) => invoke<void>("set_clipboard_clear", { secs }),
+  clearClipboardLater: () => invoke<void>("clear_clipboard_later"),
+
+  vaultIsEmpty: () => invoke<boolean>("vault_is_empty"),
+  defaultBackupDir: () => invoke<string>("default_backup_dir"),
+  suggestPassphrase: () => invoke<string>("suggest_passphrase"),
+  setBackupPassphrase: (passphrase: string, dir: string) =>
+    invoke<Settings>("set_backup_passphrase", { passphrase, dir }),
+  backUpNow: () => invoke<Settings>("back_up_now"),
+  setBackupDir: (dir: string) => invoke<Settings>("set_backup_dir", { dir }),
+  setBackupAuto: (on: boolean) => invoke<Settings>("set_backup_auto", { on }),
+  restoreBackup: (path: string, passphrase: string) =>
+    invoke<void>("restore_backup", { path, passphrase }),
 
   getTree: () => invoke<Tree>("get_tree"),
 

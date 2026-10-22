@@ -17,6 +17,8 @@ pub enum AppError {
     Crypto(String),
     #[error("{0}")]
     Keychain(String),
+    #[error("{0}")]
+    File(String),
     #[error("Database error: {0}")]
     Database(rusqlite::Error),
 }
@@ -30,6 +32,7 @@ impl AppError {
             Self::Auth(_) => "auth",
             Self::Crypto(_) => "crypto",
             Self::Keychain(_) => "keychain",
+            Self::File(_) => "file",
             Self::Database(_) => "database",
         }
     }
@@ -41,6 +44,12 @@ impl From<rusqlite::Error> for AppError {
             rusqlite::Error::QueryReturnedNoRows => Self::NotFound,
             e => Self::Database(e),
         }
+    }
+}
+
+impl From<std::io::Error> for AppError {
+    fn from(e: std::io::Error) -> Self {
+        Self::File(e.to_string())
     }
 }
 

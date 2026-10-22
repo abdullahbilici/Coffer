@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Run } from "../app/actions";
+import type { Copy, Run } from "../app/actions";
 import { api, type Project } from "../lib/api";
 import { useSecrets } from "./useSecrets";
 import type { Session } from "./useSession";
@@ -10,7 +10,7 @@ type Options = {
   projectId: number;
   run: Run;
   session: Session;
-  onCopy: (text: string) => Promise<void>;
+  onCopy: Copy;
 };
 
 /**

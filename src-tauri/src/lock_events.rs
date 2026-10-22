@@ -10,7 +10,10 @@ use objc2_app_kit::{
 use objc2_foundation::{NSDistributedNotificationCenter, NSNotification, NSString};
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::state::AppState;
+use crate::{
+    backup::{self, Trigger},
+    state::AppState,
+};
 
 /// Emitted with a `SessionInfo` payload whenever the backend changes the session on its own.
 pub const SESSION_CHANGED: &str = "session-changed";
@@ -20,6 +23,9 @@ const SCREEN_LOCKED: &str = "com.apple.screenIsLocked";
 pub fn observe(app: &AppHandle) {
     let app = app.clone();
     let handler = RcBlock::new(move |_: NonNull<NSNotification>| {
+        // Write pending changes while the key is still here. Failures are recorded in the
+        // settings and shown in the Backup section.
+        let _ = backup::run(&app, Trigger::Flush);
         let info = app.state::<AppState>().session().close_window();
         let _ = app.emit(SESSION_CHANGED, info);
     });

@@ -1,5 +1,5 @@
 import { FilePlus, Folder, FolderPlus, LayoutGrid, List, ListPlus, Pencil } from "lucide-react";
-import type { Run, VaultActions } from "../../app/actions";
+import type { Copy, Run, VaultActions } from "../../app/actions";
 import type { Session } from "../../hooks/useSession";
 import { useProjectOverview, type Overview } from "../../hooks/useProjectOverview";
 import { useStoredState } from "../../hooks/useStoredState";
@@ -40,7 +40,7 @@ type Props = {
   run: Run;
   actions: VaultActions;
   session: Session;
-  onCopy: (text: string) => Promise<void>;
+  onCopy: Copy;
   /** Todo rows closing before they leave the list. */
   deleting: ReadonlySet<string>;
 };

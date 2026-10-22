@@ -9,7 +9,7 @@ import {
   Tag,
   type LucideIcon,
 } from "lucide-react";
-import type { Run, VaultActions } from "../../app/actions";
+import type { Copy, Run, VaultActions } from "../../app/actions";
 import type { Session } from "../../hooks/useSession";
 import { api, type Item, type ItemSummary, type Tree } from "../../lib/api";
 import { cx } from "../../lib/cx";
@@ -38,7 +38,7 @@ type Props = {
   session: Session;
   run: Run;
   actions: VaultActions;
-  onCopy: (text: string) => Promise<void>;
+  onCopy: Copy;
 };
 
 /** Every tag path, parents included (`env` and `env/prod`). */
@@ -205,7 +205,7 @@ type NoteRowProps = {
   session: Session;
   run: Run;
   actions: VaultActions;
-  onCopy: (text: string) => Promise<void>;
+  onCopy: Copy;
 };
 
 function NoteRow({ item, location, open, onToggle, session, run, actions, onCopy }: NoteRowProps) {
@@ -267,7 +267,7 @@ type PreviewProps = {
   version: number;
   session: Session;
   run: Run;
-  onCopy: (text: string) => Promise<void>;
+  onCopy: Copy;
   onGoTo: () => void;
 };
 

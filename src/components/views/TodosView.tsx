@@ -1,5 +1,5 @@
 import { Box, Plus } from "lucide-react";
-import type { Run, VaultActions } from "../../app/actions";
+import type { Copy, Run, VaultActions } from "../../app/actions";
 import type { Session } from "../../hooks/useSession";
 import { useStoredState } from "../../hooks/useStoredState";
 import type { Tree } from "../../lib/api";
@@ -24,7 +24,7 @@ type Props = {
   session: Session;
   run: Run;
   actions: VaultActions;
-  onCopy: (text: string) => Promise<void>;
+  onCopy: Copy;
   deleting: ReadonlySet<string>;
 };
 

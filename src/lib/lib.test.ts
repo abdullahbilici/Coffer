@@ -4,6 +4,8 @@ import { pinKey, pinnedFirst, pinnedSet, reorder } from "./pins";
 import { toggled } from "./sets";
 import { sortItems } from "./sort";
 import { buildTagTree, hasTag } from "./tags";
+import { displayPath, fileName } from "./paths";
+import { formatAgo } from "./time";
 import { folderPath, locationLabel } from "./tree";
 
 const item = (id: number, over: Partial<ItemSummary> = {}): ItemSummary => ({
@@ -105,5 +107,25 @@ describe("sets", () => {
     expect([...toggled(set, 2)]).toEqual([1, 2]);
     expect([...toggled(set, 1)]).toEqual([]);
     expect([...set]).toEqual([1]);
+  });
+});
+
+describe("time", () => {
+  it("formats recent times relative to now", () => {
+    const now = 10 * 24 * 3_600_000;
+    expect(formatAgo(now - 30_000, now)).toBe("Just now");
+    expect(formatAgo(now - 5 * 60_000, now)).toBe("5 min ago");
+    expect(formatAgo(now - 3 * 3_600_000, now)).toBe("3 h ago");
+    expect(formatAgo(now + 1000, now)).toBe("Just now");
+  });
+});
+
+describe("paths", () => {
+  it("names iCloud Drive and the home folder like Finder", () => {
+    const icloud = "/Users/me/Library/Mobile Documents/com~apple~CloudDocs/Coffer";
+    expect(displayPath(icloud)).toBe("iCloud Drive/Coffer");
+    expect(displayPath("/Users/me/Documents/Coffer")).toBe("~/Documents/Coffer");
+    expect(displayPath("/Volumes/Backup")).toBe("/Volumes/Backup");
+    expect(fileName("/a/b/Coffer 2026-10-23.coffer")).toBe("Coffer 2026-10-23.coffer");
   });
 });

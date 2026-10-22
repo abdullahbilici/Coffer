@@ -1,12 +1,14 @@
 //! Tauri command handlers. Keep them thin: validate input, take locks, delegate to `db`.
 
+pub mod backup;
 pub mod folders;
 pub mod items;
 pub mod payments;
 pub mod pins;
 pub mod projects;
-mod sealing;
+pub mod sealing;
 pub mod session;
+pub mod settings;
 pub mod todos;
 pub mod vault;
 

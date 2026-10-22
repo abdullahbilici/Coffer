@@ -3,7 +3,9 @@ pub mod items;
 pub mod payments;
 pub mod pins;
 pub mod projects;
+pub mod settings;
 pub mod todos;
+pub mod vault;
 
 use std::path::Path;
 
@@ -80,6 +82,15 @@ const MIGRATIONS: &[Migration] = &[
     ALTER TABLE projects ADD COLUMN pin_order INTEGER;
     ALTER TABLE folders ADD COLUMN pin_order INTEGER;
     ALTER TABLE items ADD COLUMN pin_order INTEGER;
+"#,
+    ),
+    // App settings as key/value rows; a missing key means the default (see `settings`).
+    Migration::Sql(
+        r#"
+    CREATE TABLE settings (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+    );
 "#,
     ),
     // Agenda: todos (general or per project) and payments with their price history.
@@ -235,11 +246,34 @@ mod tests {
     }
 
     #[test]
-    fn agenda_migration_runs_on_existing_vault() {
+    fn migration_5_adds_settings_with_defaults() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate_to(&conn, 4).unwrap();
+        conn.execute_batch(
+            "INSERT INTO projects (id, name, created_at, updated_at, pin_order)
+             VALUES (1, 'Acme', 0, 0, 0);",
+        )
+        .unwrap();
+
+        migrate(&conn).unwrap();
+
+        let name: String = conn
+            .query_row("SELECT name FROM projects WHERE pin_order = 0", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(name, "Acme");
+        let loaded = settings::load(&conn).unwrap();
+        assert_eq!(loaded.unlock_window_secs, Some(600));
+        assert!(!loaded.backup.configured);
+    }
+
+    #[test]
+    fn migration_6_adds_agenda_tables() {
         let conn = Connection::open_in_memory().unwrap();
         conn.pragma_update(None, "foreign_keys", true).unwrap();
-        // The agenda tables are the newest migration.
-        migrate_to(&conn, MIGRATIONS.len() - 1).unwrap();
+        // Migration 6 adds the agenda tables.
+        migrate_to(&conn, 5).unwrap();
         conn.execute_batch(
             "INSERT INTO projects (id, name, created_at, updated_at, pin_order)
              VALUES (1, 'Acme', 0, 0, 0);

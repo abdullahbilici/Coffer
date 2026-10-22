@@ -16,16 +16,25 @@ const SESSION_CHANGED = "session-changed";
  * The live countdown lives in `SessionBar`.
  */
 export function useSession() {
-  const [info, setInfo] = useState<SessionInfo>({ entered: false, expiresAt: null });
+  const [info, setInfo] = useState<SessionInfo>({
+    entered: false,
+    unlocked: false,
+    expiresAt: null,
+  });
   const [unlocked, setUnlocked] = useState(false);
 
+  // A window without a timer stays open until the backend reports it closed.
   useEffect(() => {
-    const remaining = info.expiresAt === null ? 0 : info.expiresAt - Date.now();
+    if (info.expiresAt === null) {
+      setUnlocked(info.unlocked);
+      return;
+    }
+    const remaining = info.expiresAt - Date.now();
     setUnlocked(remaining > 0);
     if (remaining <= 0) return;
     const timer = setTimeout(() => setUnlocked(false), remaining);
     return () => clearTimeout(timer);
-  }, [info.expiresAt]);
+  }, [info.unlocked, info.expiresAt]);
 
   // The backend closes the window on its own when the screen locks or the Mac sleeps.
   useEffect(() => {
@@ -57,8 +66,9 @@ export function useSession() {
 
   /** Asks for Touch ID first if the window is closed. Use before entering any edit mode. */
   const ensureUnlocked = useCallback(async () => {
-    if (info.expiresAt === null || info.expiresAt <= Date.now()) await unlock();
-  }, [info.expiresAt, unlock]);
+    const open = info.unlocked && (info.expiresAt === null || info.expiresAt > Date.now());
+    if (!open) await unlock();
+  }, [info.unlocked, info.expiresAt, unlock]);
 
   return useMemo(
     () => ({
@@ -69,6 +79,8 @@ export function useSession() {
       lock,
       withUnlock,
       ensureUnlocked,
+      /** Applies a session the backend returned from another command. */
+      update: setInfo,
     }),
     [info.entered, info.expiresAt, unlocked, unlock, lock, withUnlock, ensureUnlocked],
   );

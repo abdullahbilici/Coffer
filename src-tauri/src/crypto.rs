@@ -16,17 +16,36 @@ pub type VaultKey = Zeroizing<Vec<u8>>;
 /// Loads the vault key from the Keychain, creating one on first run.
 /// Any error other than "not found" is returned as-is so an existing key is never overwritten.
 pub fn load_or_create_key() -> AppResult<VaultKey> {
-    match get_generic_password(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT) {
-        Ok(bytes) => Ok(Zeroizing::new(bytes)),
-        Err(e) if e.code() == ERR_SEC_ITEM_NOT_FOUND => {
-            let key = Key::<Aes256Gcm>::generate();
-            let bytes = Zeroizing::new(key.to_vec());
-            set_generic_password(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT, &bytes)
-                .map_err(|e| AppError::Keychain(format!("Could not store vault key: {e}")))?;
-            Ok(bytes)
-        }
-        Err(e) => Err(AppError::Keychain(format!("Could not read vault key: {e}"))),
+    if let Some(key) = load_secret(KEYCHAIN_ACCOUNT, "vault key")? {
+        return Ok(key);
     }
+    let key = Zeroizing::new(Key::<Aes256Gcm>::generate().to_vec());
+    store_secret(KEYCHAIN_ACCOUNT, &key, "vault key")?;
+    Ok(key)
+}
+
+/// Reads a Coffer Keychain item; `None` if it doesn't exist. `label` names it in errors.
+pub fn load_secret(account: &str, label: &str) -> AppResult<Option<Zeroizing<Vec<u8>>>> {
+    #[cfg(debug_assertions)]
+    if crate::dev::insecure() {
+        return Ok(crate::dev::load_secret(account));
+    }
+    match get_generic_password(KEYCHAIN_SERVICE, account) {
+        Ok(bytes) => Ok(Some(Zeroizing::new(bytes))),
+        Err(e) if e.code() == ERR_SEC_ITEM_NOT_FOUND => Ok(None),
+        Err(e) => Err(AppError::Keychain(format!("Could not read {label}: {e}"))),
+    }
+}
+
+/// Creates or replaces a Coffer Keychain item.
+pub fn store_secret(account: &str, bytes: &[u8], label: &str) -> AppResult<()> {
+    #[cfg(debug_assertions)]
+    if crate::dev::insecure() {
+        crate::dev::store_secret(account, bytes);
+        return Ok(());
+    }
+    set_generic_password(KEYCHAIN_SERVICE, account, bytes)
+        .map_err(|e| AppError::Keychain(format!("Could not store {label}: {e}")))
 }
 
 fn crypto_error(message: &str) -> AppError {
