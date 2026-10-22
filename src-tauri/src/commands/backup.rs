@@ -3,7 +3,7 @@ use std::{fs, path::Path};
 use tauri::{AppHandle, Manager, State};
 use zeroize::Zeroizing;
 
-use super::session::{authenticate, open_window_after_auth};
+use super::session::{authenticated_key, open_window_after_auth};
 use crate::{
     backup::{self, Trigger},
     db::{
@@ -71,9 +71,9 @@ pub async fn set_backup_passphrase(
 ) -> AppResult<Settings> {
     let passphrase = Zeroizing::new(passphrase);
     required_dir(&dir)?;
-    authenticate("set your backup passphrase").await?;
+    let key = authenticated_key("set your backup passphrase").await?;
     if !state.session().is_unlocked() {
-        open_window_after_auth(&app, &state)?;
+        open_window_after_auth(&app, &state, key)?;
     }
     blocking(move || backup::set_passphrase(&passphrase)).await?;
     {
@@ -121,8 +121,8 @@ pub async fn restore_backup(
     let passphrase = Zeroizing::new(passphrase);
     let json = blocking(move || backup::open_file(&fs::read(path)?, &passphrase)).await?;
     if !state.session().is_unlocked() {
-        authenticate("restore your Coffer").await?;
-        open_window_after_auth(&app, &state)?;
+        let key = authenticated_key("restore your Coffer").await?;
+        open_window_after_auth(&app, &state, key)?;
     }
     let conn = state.db();
     let key = {
