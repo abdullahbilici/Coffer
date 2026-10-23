@@ -732,14 +732,24 @@ fn todo_line(todo: &Todo, vault: &Vault, today: &str) -> String {
     line
 }
 
-/// The line of `body` around the first matched word, shortened. A line holding a value is
+/// The line of `body` matching the most words, shortened. A line holding a value is
 /// never cut, since a cut value would be wrong: it stays out instead, for get_note to show.
 fn snippet(body: &str, words: &[&str], values: bool) -> Option<String> {
     const MAX: usize = 120;
-    let line = body.lines().find(|line| {
+    let matched = |line: &str| {
         let lower = line.to_lowercase();
-        words.iter().any(|w| lower.contains(w))
-    })?;
+        words.iter().filter(|w| lower.contains(*w)).count()
+    };
+    // The first line among those matching the most words.
+    let line = body
+        .lines()
+        .map(|line| (matched(line), line))
+        .filter(|(n, _)| *n > 0)
+        .fold(None, |best: Option<(usize, &str)>, hit| match best {
+            Some(b) if b.0 >= hit.0 => Some(b),
+            _ => Some(hit),
+        })?
+        .1;
     let line = line.trim();
     if values && line.len() > MAX && line.contains(": ") {
         return Some("…".to_string());
@@ -978,6 +988,8 @@ mod tests {
         let found = call(&conn, "search", json!({ "query": "panel url" }));
         assert!(found.starts_with("1 result for"), "{found}");
         assert!(found.contains("text: \"URL: `https://panel.example.com`\""));
+        let best = call(&conn, "search", json!({ "query": "panel user apo" }));
+        assert!(best.contains("text: \"User: `apo`\""), "{best}");
         let partial = call(&conn, "search", json!({ "query": "hosting zebra" }));
         assert!(partial.contains("folder 2: Hosting") && partial.contains("note 1"));
         assert!(call(&conn, "search", json!({ "query": "zebra" })).starts_with("Nothing"));
