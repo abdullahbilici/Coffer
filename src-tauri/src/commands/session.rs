@@ -18,21 +18,26 @@ pub fn session_info(state: State<AppState>) -> SessionInfo {
     state.session().info()
 }
 
+/// Both windows follow the session: the one that asked gets it back, the other one hears it.
 #[tauri::command]
-pub async fn unlock(state: State<'_, AppState>) -> AppResult<SessionInfo> {
+pub async fn unlock(app: AppHandle, state: State<'_, AppState>) -> AppResult<SessionInfo> {
     let key = authenticated_key("unlock your Coffer").await?;
 
     #[cfg(debug_assertions)]
     crate::seed::run_if_requested(&state.db(), &key)?;
 
-    open_window(&state, key)
+    let info = open_window(&state, key)?;
+    let _ = app.emit(SESSION_CHANGED, &info);
+    Ok(info)
 }
 
 #[tauri::command]
 pub fn lock(app: AppHandle, state: State<AppState>) -> SessionInfo {
     // Failures are recorded in the settings and shown in the Backup section.
     let _ = backup::run(&app, Trigger::Flush);
-    state.session().close_window()
+    let info = state.session().close_window();
+    let _ = app.emit(SESSION_CHANGED, &info);
+    info
 }
 
 /// Touch ID (or the account password), then the vault key from the Keychain. Every prompt for

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { ChevronLeft, ChevronRight, Tag } from "lucide-react";
 import type { TreeEdit } from "../components/sidebar/ProjectTree";
 import { SettingsModal } from "../components/settings/SettingsModal";
@@ -29,6 +30,9 @@ import { hasTag } from "../lib/tags";
 import type { Copy, Run } from "./actions";
 import { useVaultActions } from "./useVaultActions";
 import styles from "./App.module.css";
+
+/** Mirrors `capture::OPEN`: quick capture hands a conversation over to this window. */
+const CAPTURE_OPEN = "capture-open";
 
 /** Layout and routing; state and actions live in the hooks it composes. */
 export function App() {
@@ -117,6 +121,19 @@ export function App() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [selectAssistant]);
+
+  // Registered once; reads the latest handlers through a ref.
+  const openFromCapture = useRef<(id: number) => void>(() => {});
+  openFromCapture.current = (id) => {
+    setSettingsOpen(false);
+    selectAssistant();
+    void assistant.load();
+    void assistant.open(id);
+  };
+  useEffect(() => {
+    const unlisten = listen<number>(CAPTURE_OPEN, (e) => openFromCapture.current(e.payload));
+    return () => void unlisten.then((stop) => stop());
+  }, []);
 
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
 

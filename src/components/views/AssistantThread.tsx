@@ -17,13 +17,12 @@ import {
 } from "lucide-react";
 import type { Copy, Run } from "../../app/actions";
 import type { Thread } from "../../hooks/useAssistant";
-import { useHandleChips } from "../../hooks/useHandleChips";
 import type { Session } from "../../hooks/useSession";
 import type { ToolCall, Tree } from "../../lib/api";
-import { threadBlocks, toolLabel, withSecretChips, type Block } from "../../lib/assistant";
+import { threadBlocks, toolLabel, type Block } from "../../lib/assistant";
 import { cx } from "../../lib/cx";
+import { AssistantReply } from "./AssistantReply";
 import { DraftCard } from "./DraftCard";
-import { Markdown } from "./Markdown";
 import styles from "./Assistant.module.css";
 
 const TOOL_ICONS: Record<string, LucideIcon> = {
@@ -118,7 +117,7 @@ export function AssistantThread({ thread, replying, onApply, onDiscard, ...share
               {...shared}
             />
           ))}
-          {thread.streaming && <Reply text={thread.streaming} {...shared} />}
+          {thread.streaming && <AssistantReply text={thread.streaming} {...shared} />}
           {waiting && (
             <span className={styles.thinking} aria-label="Thinking">
               <span />
@@ -169,7 +168,7 @@ function ThreadBlock({
         />
       );
     case "reply":
-      return <Reply text={block.text} {...shared} />;
+      return <AssistantReply text={block.text} {...shared} />;
     case "tools":
       return (
         <div className={styles.tools}>
@@ -197,17 +196,6 @@ function Paste({ text }: { text: string }) {
       <ClipboardList size={14} strokeWidth={1.75} className={styles.pasteIcon} />
       <span>Pasted text</span>
       <span className={styles.pasteMeta}>{lines === 1 ? "1 line" : `${lines} lines`}</span>
-    </div>
-  );
-}
-
-/** Assistant markdown; secret handles render as masked chips the user can reveal. */
-function Reply({ text, session, run, onCopy }: Shared & { text: string }) {
-  const { source, handles } = useMemo(() => withSecretChips(text), [text]);
-  const chips = useHandleChips(handles, session, run, onCopy);
-  return (
-    <div className={styles.reply}>
-      <Markdown source={source} chips={chips} size="md" />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 mod assistant;
 mod auth;
 mod backup;
+mod capture;
 mod clipboard;
 mod commands;
 mod crypto;
@@ -20,8 +21,8 @@ mod time;
 use tauri::Manager;
 
 use commands::{
-    assistant as assistant_cmd, backup as backup_cmd, folders, items, payments, pins, projects,
-    session as session_cmd, settings, todos, vault,
+    assistant as assistant_cmd, backup as backup_cmd, capture as capture_cmd, folders, items,
+    payments, pins, projects, session as session_cmd, settings, todos, vault,
 };
 pub use mcp::serve as serve_mcp;
 use state::AppState;
@@ -42,11 +43,17 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(capture::plugin())
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
             let conn = db::open(&dir.join(db_file()))?;
+            let shortcut = db::settings::capture_shortcut(&conn)?;
             app.manage(AppState::new(conn));
+            capture::create(app.handle())?;
+            // A shortcut another app took since it was set just doesn't open the panel until
+            // another one is picked in Settings.
+            let _ = capture::register(app.handle(), shortcut.as_deref());
             lock_events::observe(app.handle());
             backup::spawn_worker(app.handle().clone());
             Ok(())
@@ -61,6 +68,11 @@ pub fn run() {
             settings::clear_clipboard_later,
             settings::set_mcp_access,
             settings::mcp_command,
+            capture_cmd::set_capture_shortcut,
+            capture_cmd::hide_capture,
+            capture_cmd::focus_capture,
+            capture_cmd::fit_capture,
+            capture_cmd::open_in_coffer,
             assistant_cmd::save_assistant_settings,
             assistant_cmd::assistant_models,
             assistant_cmd::list_conversations,
@@ -107,6 +119,15 @@ pub fn run() {
             pins::set_pinned,
             pins::reorder_pins,
         ])
+        // The hidden capture panel would otherwise keep Coffer running once the main window
+        // closes; Coffer has no background mode.
+        .on_window_event(|window, event| {
+            if window.label() == capture::MAIN_LABEL
+                && matches!(event, tauri::WindowEvent::Destroyed)
+            {
+                window.app_handle().exit(0);
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

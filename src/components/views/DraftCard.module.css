@@ -13,6 +13,36 @@
   transition: opacity var(--duration-slow) var(--ease-out);
 }
 
+/* Quick capture: no frame of its own inside the panel; a long diff scrolls, the footer stays. */
+.compact {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.compact .body {
+  min-height: 0;
+  overflow-y: scroll;
+}
+
+/* Lined up with the panel's 16 px edge instead of the card's 12. */
+.compact .groupHead,
+.compact .footer {
+  padding-left: var(--space-4);
+}
+
+.compact .entryHead {
+  padding-left: var(--space-6);
+}
+
+.compact .lines {
+  padding-left: 46px;
+}
+
 .discarded .body {
   opacity: 0.5;
 }

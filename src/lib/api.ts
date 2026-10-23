@@ -50,6 +50,8 @@ export type Settings = {
   assistant: AssistantSettings;
   /** `coffer --mcp` may answer an MCP client. */
   mcpAccess: boolean;
+  /** Opens quick capture from any app, e.g. `Alt+Shift+Space` (see `lib/shortcut.ts`). */
+  captureShortcut: string | null;
 };
 
 export type Conversation = {
@@ -252,6 +254,16 @@ export const api = {
   setMcpAccess: (on: boolean) => invoke<void>("set_mcp_access", { on }),
   /** The `claude mcp add` command for the running app. */
   mcpCommand: () => invoke<string>("mcp_command"),
+  /** `null` switches quick capture's shortcut off. */
+  setCaptureShortcut: (shortcut: string | null) =>
+    invoke<void>("set_capture_shortcut", { shortcut }),
+
+  /** Quick capture's own window: hide it, take the keyboard back, fit it to its content. */
+  hideCapture: () => invoke<void>("hide_capture"),
+  focusCapture: () => invoke<void>("focus_capture"),
+  fitCapture: (height: number) => invoke<void>("fit_capture", { height }),
+  /** Brings the main window forward on a conversation. */
+  openInCoffer: (conversationId: number) => invoke<void>("open_in_coffer", { conversationId }),
 
   /** `apiKey`: `null` keeps the stored key, `""` removes it. */
   saveAssistantSettings: (url: string, model: string, context: string, apiKey: string | null) =>

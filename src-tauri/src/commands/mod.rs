@@ -2,6 +2,7 @@
 
 pub mod assistant;
 pub mod backup;
+pub mod capture;
 pub mod folders;
 pub mod items;
 pub mod payments;
