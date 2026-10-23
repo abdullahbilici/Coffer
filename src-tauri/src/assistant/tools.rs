@@ -26,28 +26,47 @@ use crate::{
 const MAX_RESULT: usize = 6_000;
 const MAX_SEARCH_RESULTS: usize = 20;
 
+/// A read tool: its name, what it does and a JSON schema of its arguments. The assistant and
+/// the MCP server describe the same tools from this one list.
+pub struct Spec {
+    pub name: &'static str,
+    pub description: &'static str,
+    pub parameters: Value,
+}
+
 /// The tool definitions in Ollama's format.
 pub fn specs() -> Value {
+    catalog()
+        .into_iter()
+        .map(|spec| {
+            json!({
+                "type": "function",
+                "function": {
+                    "name": spec.name,
+                    "description": spec.description,
+                    "parameters": spec.parameters,
+                },
+            })
+        })
+        .collect()
+}
+
+pub fn catalog() -> Vec<Spec> {
     let project = json!({
         "type": "string",
         "description": "Project name or id. \"personal\" means payments and todos without a project.",
     });
-    let tool = |name: &str, description: &str, properties: Value, required: &[&str]| {
-        json!({
-            "type": "function",
-            "function": {
-                "name": name,
-                "description": description,
-                "parameters": { "type": "object", "properties": properties, "required": required },
-            },
-        })
+    let tool = |name, description, properties: Value, required: &[&str]| Spec {
+        name,
+        description,
+        parameters: json!({ "type": "object", "properties": properties, "required": required }),
     };
-    json!([
+    vec![
         tool(
             "list_projects",
             "All projects with what they contain.",
             json!({}),
-            &[]
+            &[],
         ),
         tool(
             "get_project",
@@ -95,7 +114,7 @@ pub fn specs() -> Value {
             }),
             &[],
         ),
-    ])
+    ]
 }
 
 /// Runs a tool. Failures come back as text, so the model can correct itself.
