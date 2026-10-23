@@ -2,7 +2,7 @@
 
 use rusqlite::{Connection, params};
 
-use super::{SecureBody, expect_changed};
+use super::{Change, SecureBody, expect_changed};
 use crate::error::AppResult;
 
 pub struct ConversationRow {
@@ -79,6 +79,14 @@ pub fn messages(conn: &Connection, conversation_id: i64) -> AppResult<Vec<Messag
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
+/// Replaces a stored message, e.g. a draft once it is applied or discarded.
+pub fn update_message(conn: &Connection, id: i64, turn: &SecureBody) -> AppResult<()> {
+    expect_changed(conn.execute(
+        "UPDATE conversation_messages SET nonce = ?2, ciphertext = ?3 WHERE id = ?1",
+        params![id, turn.nonce, turn.ciphertext],
+    )?)
+}
+
 /// Appends a message and marks the conversation active.
 pub fn insert_message(
     conn: &Connection,
@@ -86,7 +94,7 @@ pub fn insert_message(
     turn: &SecureBody,
     now: i64,
 ) -> AppResult<i64> {
-    let tx = conn.unchecked_transaction()?;
+    let tx = Change::begin(conn)?;
     let changed = tx.execute(
         "UPDATE conversations SET updated_at = ?2 WHERE id = ?1",
         params![conversation_id, now],
