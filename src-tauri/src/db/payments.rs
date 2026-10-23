@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use rusqlite::{Connection, params};
 use serde::Serialize;
 
-use super::expect_changed;
+use super::{Change, expect_changed};
 use crate::error::{AppError, AppResult};
 
 #[derive(Serialize)]
@@ -82,7 +82,7 @@ pub fn get(conn: &Connection, id: i64) -> AppResult<Payment> {
 
 /// Creates a payment whose first price applies from its start date.
 pub fn insert(conn: &Connection, record: &PaymentRecord, amount: i64, now: i64) -> AppResult<i64> {
-    let tx = conn.unchecked_transaction()?;
+    let tx = Change::begin(conn)?;
     tx.execute(
         "INSERT INTO payments (project_id, name, currency, cycle, start_date, cancel_date,
          created_at, updated_at)
@@ -111,7 +111,7 @@ pub fn update(
     price: Option<(&str, i64)>,
     now: i64,
 ) -> AppResult<()> {
-    let tx = conn.unchecked_transaction()?;
+    let tx = Change::begin(conn)?;
     let changed = tx.execute(
         "UPDATE payments SET project_id = ?2, name = ?3, currency = ?4, cycle = ?5,
          start_date = ?6, cancel_date = ?7, updated_at = ?8 WHERE id = ?1",

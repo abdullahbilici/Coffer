@@ -65,7 +65,7 @@ export function App() {
     [showToast],
   );
 
-  const assistant = useAssistant(session, run);
+  const assistant = useAssistant(session, run, reload);
   const composerRef = useRef<HTMLTextAreaElement>(null);
 
   const { actions, saveItem, deleting } = useVaultActions({

@@ -4,7 +4,7 @@
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 
-use super::expect_changed;
+use super::{Change, expect_changed};
 use crate::error::AppResult;
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -87,7 +87,7 @@ pub fn unpin(conn: &Connection, pin: PinRef) -> AppResult<()> {
 
 /// Renumbers pins in the given order. Entries that aren't pinned are ignored.
 pub fn reorder(conn: &Connection, order: &[PinRef]) -> AppResult<()> {
-    let tx = conn.unchecked_transaction()?;
+    let tx = Change::begin(conn)?;
     for (index, pin) in order.iter().enumerate() {
         let table = pin.kind.table();
         tx.execute(

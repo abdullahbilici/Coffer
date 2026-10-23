@@ -1,7 +1,7 @@
 use rusqlite::{Connection, params};
 use serde::Serialize;
 
-use super::expect_changed;
+use super::{Change, expect_changed};
 use crate::error::AppResult;
 
 #[derive(Serialize)]
@@ -86,7 +86,7 @@ pub fn move_to(
     project_id: i64,
     parent_id: Option<i64>,
 ) -> AppResult<()> {
-    let tx = conn.unchecked_transaction()?;
+    let tx = Change::begin(conn)?;
     let changed = tx.execute(
         "UPDATE folders SET project_id = ?2, parent_id = ?3 WHERE id = ?1",
         params![id, project_id, parent_id],

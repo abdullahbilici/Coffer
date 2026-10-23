@@ -219,6 +219,44 @@ pub struct SecureBody {
     pub ciphertext: Vec<u8>,
 }
 
+/// A change that commits or rolls back as a whole, nestable: a savepoint opens a transaction
+/// when none is open, and otherwise joins the outer one (an assistant draft applies many
+/// changes in one transaction). Rolls back when dropped without `commit`.
+pub struct Change<'a> {
+    conn: &'a Connection,
+    done: bool,
+}
+
+impl<'a> Change<'a> {
+    pub fn begin(conn: &'a Connection) -> rusqlite::Result<Self> {
+        conn.execute_batch("SAVEPOINT change")?;
+        Ok(Self { conn, done: false })
+    }
+
+    pub fn commit(mut self) -> rusqlite::Result<()> {
+        self.done = true;
+        self.conn.execute_batch("RELEASE change")
+    }
+}
+
+impl std::ops::Deref for Change<'_> {
+    type Target = Connection;
+
+    fn deref(&self) -> &Connection {
+        self.conn
+    }
+}
+
+impl Drop for Change<'_> {
+    fn drop(&mut self) {
+        if !self.done {
+            let _ = self
+                .conn
+                .execute_batch("ROLLBACK TO change; RELEASE change");
+        }
+    }
+}
+
 /// Turns an UPDATE that matched no rows into `NotFound`.
 fn expect_changed(changed: usize) -> AppResult<()> {
     if changed == 0 {
@@ -239,6 +277,31 @@ pub fn open_in_memory() -> Connection {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn changes_nest_and_roll_back_as_a_whole() {
+        let conn = open_in_memory();
+        let count = |conn: &Connection| -> i64 {
+            conn.query_row("SELECT COUNT(*) FROM projects", [], |r| r.get(0))
+                .unwrap()
+        };
+        {
+            let outer = Change::begin(&conn).unwrap();
+            let inner = Change::begin(&outer).unwrap();
+            inner
+                .execute("INSERT INTO projects (name, readme, created_at, updated_at) VALUES ('a', '', 0, 0)", [])
+                .unwrap();
+            inner.commit().unwrap();
+            assert_eq!(count(&outer), 1);
+        }
+        assert_eq!(count(&conn), 0);
+        let change = Change::begin(&conn).unwrap();
+        change
+            .execute("INSERT INTO projects (name, readme, created_at, updated_at) VALUES ('b', '', 0, 0)", [])
+            .unwrap();
+        change.commit().unwrap();
+        assert_eq!(count(&conn), 1);
+    }
 
     #[test]
     fn migration_3_upgrades_legacy_secret_markers() {

@@ -37,7 +37,7 @@ const updated = (
  * elsewhere. History is decrypted, so it loads inside the unlock window and is dropped as soon
  * as the window closes, like revealed secrets.
  */
-export function useAssistant(session: Session, run: Run) {
+export function useAssistant(session: Session, run: Run, reload: () => Promise<void>) {
   /** `null` until loaded, and again once the unlock window closes. */
   const [conversations, setConversations] = useState<Conversation[] | null>(null);
   const [thread, setThread] = useState<Thread>(NEW_THREAD);
@@ -122,9 +122,9 @@ export function useAssistant(session: Session, run: Run) {
   );
 
   const send = useCallback(
-    (text: string) =>
+    (text: string, paste: string | null = null) =>
       run(async () => {
-        const sent = await session.withUnlock(() => api.sendMessage(threadId.current, text));
+        const sent = await session.withUnlock(() => api.sendMessage(threadId.current, text, paste));
         const { conversation, message } = sent;
         setConversations((list) =>
           [conversation, ...(list ?? []).filter((c) => c.id !== conversation.id)].sort(byActivity),
@@ -136,6 +136,40 @@ export function useAssistant(session: Session, run: Run) {
         );
       }),
     [run, session],
+  );
+
+  /** Puts a stored message back in the open thread, e.g. a draft that was just applied. */
+  const replace = useCallback((id: number, message: Message) => {
+    setThread((t) =>
+      t.id === id
+        ? { ...t, messages: t.messages.map((m) => (m.id === message.id ? message : m)) }
+        : t,
+    );
+  }, []);
+
+  /** Applies a draft (Touch ID if the window is closed), then reloads the vault. */
+  const applyDraft = useCallback(
+    (messageId: number) => {
+      const id = threadId.current;
+      if (id === null) return Promise.resolve();
+      return run(async () => {
+        const message = await session.withUnlock(() => api.applyDraft(id, messageId));
+        replace(id, message);
+        await reload();
+      });
+    },
+    [run, session, replace, reload],
+  );
+
+  const discardDraft = useCallback(
+    (messageId: number) => {
+      const id = threadId.current;
+      if (id === null) return Promise.resolve();
+      return run(async () => {
+        replace(id, await session.withUnlock(() => api.discardDraft(id, messageId)));
+      });
+    },
+    [run, session, replace],
   );
 
   const cancel = useCallback(() => {
@@ -165,7 +199,31 @@ export function useAssistant(session: Session, run: Run) {
   const replying = conversations?.find((c) => c.id === thread.id)?.replying ?? false;
 
   return useMemo(
-    () => ({ conversations, thread, replying, load, open, send, cancel, rename, remove }),
-    [conversations, thread, replying, load, open, send, cancel, rename, remove],
+    () => ({
+      conversations,
+      thread,
+      replying,
+      load,
+      open,
+      send,
+      cancel,
+      rename,
+      remove,
+      applyDraft,
+      discardDraft,
+    }),
+    [
+      conversations,
+      thread,
+      replying,
+      load,
+      open,
+      send,
+      cancel,
+      rename,
+      remove,
+      applyDraft,
+      discardDraft,
+    ],
   );
 }

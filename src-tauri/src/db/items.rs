@@ -4,7 +4,7 @@ use rusqlite::{Connection, params};
 use serde::Serialize;
 
 pub use super::SecureBody;
-use super::expect_changed;
+use super::{Change, expect_changed};
 use crate::{error::AppResult, secrets};
 
 #[derive(Serialize)]
@@ -140,7 +140,7 @@ pub(super) fn body_columns(body: &Body) -> BodyColumns<'_> {
 
 pub fn insert(conn: &Connection, record: &ItemRecord, now: i64) -> AppResult<i64> {
     let (secure, text, nonce, ciphertext) = body_columns(record.body);
-    let tx = conn.unchecked_transaction()?;
+    let tx = Change::begin(conn)?;
     tx.execute(
         "INSERT INTO items (project_id, folder_id, title, secure, body, nonce, ciphertext, created_at, updated_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)",
@@ -154,7 +154,7 @@ pub fn insert(conn: &Connection, record: &ItemRecord, now: i64) -> AppResult<i64
 
 pub fn update(conn: &Connection, id: i64, record: &ItemRecord, now: i64) -> AppResult<()> {
     let (secure, text, nonce, ciphertext) = body_columns(record.body);
-    let tx = conn.unchecked_transaction()?;
+    let tx = Change::begin(conn)?;
     let changed = tx.execute(
         "UPDATE items SET project_id = ?2, folder_id = ?3, title = ?4, secure = ?5, body = ?6,
          nonce = ?7, ciphertext = ?8, updated_at = ?9 WHERE id = ?1",
@@ -179,7 +179,7 @@ pub fn update(conn: &Connection, id: i64, record: &ItemRecord, now: i64) -> AppR
 /// Copies an item, its encrypted columns and tags as-is. Sharing the nonce is safe because the
 /// plaintext is identical; any later edit re-encrypts with a fresh nonce.
 pub fn duplicate(conn: &Connection, id: i64, now: i64) -> AppResult<i64> {
-    let tx = conn.unchecked_transaction()?;
+    let tx = Change::begin(conn)?;
     let changed = tx.execute(
         "INSERT INTO items (project_id, folder_id, title, secure, body, nonce, ciphertext, created_at, updated_at)
          SELECT project_id, folder_id, title || ' copy', secure, body, nonce, ciphertext, ?2, ?2
@@ -207,6 +207,15 @@ pub fn move_to(
     let changed = conn.execute(
         "UPDATE items SET project_id = ?2, folder_id = ?3, updated_at = ?4 WHERE id = ?1",
         params![id, project_id, folder_id, now],
+    )?;
+    expect_changed(changed)
+}
+
+/// Renames an item without touching its body.
+pub fn rename(conn: &Connection, id: i64, title: &str, now: i64) -> AppResult<()> {
+    let changed = conn.execute(
+        "UPDATE items SET title = ?2, updated_at = ?3 WHERE id = ?1",
+        params![id, title, now],
     )?;
     expect_changed(changed)
 }
