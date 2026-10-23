@@ -23,6 +23,12 @@ export type Thread = {
 
 const NEW_THREAD: Thread = { id: null, messages: [], streaming: "", error: null, opened: 0 };
 
+/**
+ * Starts loading the model if the server has unloaded it, so the wait happens while the user
+ * types. Fire and forget: the next reply waits for the load anyway.
+ */
+export const warmUp = () => void api.warmUpAssistant().catch(() => {});
+
 const byActivity = (a: Conversation, b: Conversation) => b.updatedAt - a.updatedAt || b.id - a.id;
 
 /** The list with one conversation changed, most recently active first. */

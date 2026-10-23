@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState, type Ref } from "react";
 import { ArrowUp, ClipboardList, Square, X } from "lucide-react";
+import { warmUp } from "../../hooks/useAssistant";
 import { cx } from "../../lib/cx";
 import { IconButton } from "../ui/IconButton";
 import styles from "./Assistant.module.css";
@@ -78,6 +79,7 @@ export function AssistantComposer({ ref, replying, onSend, onStop }: Props) {
             value={text}
             placeholder="Message"
             autoFocus
+            onFocus={warmUp}
             onChange={(e) => setText(e.target.value)}
             onPaste={(e) => {
               const pasted = e.clipboardData.getData("text/plain");

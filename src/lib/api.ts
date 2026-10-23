@@ -38,6 +38,8 @@ export type AssistantSettings = {
   context: string;
   /** An API key is stored in the Keychain. */
   hasApiKey: boolean;
+  /** How long the model stays loaded after a request; `null`: while Coffer is open. */
+  keepAliveSecs: number | null;
 };
 
 /** Mirrors `db::settings::Settings`. */
@@ -270,8 +272,15 @@ export const api = {
   openInCoffer: (conversationId: number) => invoke<void>("open_in_coffer", { conversationId }),
 
   /** `apiKey`: `null` keeps the stored key, `""` removes it. */
-  saveAssistantSettings: (url: string, model: string, context: string, apiKey: string | null) =>
-    invoke<Settings>("save_assistant_settings", { url, model, context, apiKey }),
+  saveAssistantSettings: (
+    url: string,
+    model: string,
+    context: string,
+    apiKey: string | null,
+    keepAliveSecs: number | null,
+  ) => invoke<Settings>("save_assistant_settings", { url, model, context, apiKey, keepAliveSecs }),
+  /** Loads the model in the background if it isn't loaded yet; resolves at once. */
+  warmUpAssistant: () => invoke<void>("warm_up_assistant"),
   /** Uses the stored API key only when `url` is the saved one and no key is typed. */
   assistantModels: (url: string, apiKey: string | null) =>
     invoke<string[]>("assistant_models", { url, apiKey }),

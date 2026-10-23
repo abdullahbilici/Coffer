@@ -1,7 +1,7 @@
 import { useEffect, type RefObject } from "react";
 import { Fingerprint, SquarePen } from "lucide-react";
 import type { Copy, Run, VaultActions } from "../../app/actions";
-import type { Assistant } from "../../hooks/useAssistant";
+import { warmUp, type Assistant } from "../../hooks/useAssistant";
 import type { Session } from "../../hooks/useSession";
 import type { Tree } from "../../lib/api";
 import { Button } from "../ui/Button";
@@ -36,6 +36,7 @@ export function AssistantView({
   // Opening the view loads history, asking for Touch ID if the window is closed. Once loaded,
   // a closing window drops it and the locked state below offers to unlock again.
   useEffect(() => {
+    warmUp();
     if (conversations === null) void load();
     // Only when the view opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps

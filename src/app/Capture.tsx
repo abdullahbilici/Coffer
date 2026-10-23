@@ -5,7 +5,7 @@ import { AppWindow, Check, Sparkles } from "lucide-react";
 import { IconButton } from "../components/ui/IconButton";
 import { AssistantReply } from "../components/views/AssistantReply";
 import { DraftCard } from "../components/views/DraftCard";
-import { useAssistant } from "../hooks/useAssistant";
+import { useAssistant, warmUp } from "../hooks/useAssistant";
 import { useSession } from "../hooks/useSession";
 import { useToast } from "../hooks/useToast";
 import { api, errorMessage } from "../lib/api";
@@ -103,6 +103,7 @@ export function Capture() {
     const onShown = () => {
       if (!shownRef.current) {
         shownRef.current = true;
+        warmUp();
         if (settledAtHide.current) {
           settledAtHide.current = false;
           void open(null);

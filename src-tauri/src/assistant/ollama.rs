@@ -1,5 +1,8 @@
-//! Ollama's native API: `/api/chat` streamed line by line, and `/api/tags` for the model list.
-//! Requests go to the configured URL only.
+//! Ollama's native API: `/api/chat` streamed line by line, `/api/tags` for the model list and
+//! `/api/ps` for what is loaded. Requests go to the configured URL only.
+//!
+//! Every request carries the same `num_ctx` and the configured `keep_alive`: a different
+//! context length would make the server load the model again.
 
 use std::{
     io::{BufRead, BufReader},
@@ -14,7 +17,7 @@ use std::{
 
 use serde_json::{Value, json};
 use ureq::{
-    Agent,
+    Agent, RequestBuilder,
     tls::{RootCerts, TlsConfig, TlsProvider},
 };
 use zeroize::Zeroizing;
@@ -24,6 +27,8 @@ use crate::error::{AppError, AppResult};
 
 /// How often a waiting reply checks for cancel.
 const CANCEL_POLL: Duration = Duration::from_millis(100);
+/// Longest wait for a quick request (`/api/ps`, unloading): the model server is local.
+const QUICK_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Trims the URL and checks it is plain http(s) with a host, without a trailing slash.
 pub fn normalize_url(url: &str) -> AppResult<String> {
@@ -42,10 +47,15 @@ pub fn normalize_url(url: &str) -> AppResult<String> {
 }
 
 fn agent() -> Agent {
+    agent_with(None)
+}
+
+fn agent_with(timeout: Option<Duration>) -> Agent {
     Agent::new_with_config(
         Agent::config_builder()
             .http_status_as_error(false)
             .timeout_connect(Some(Duration::from_secs(5)))
+            .timeout_global(timeout)
             .tls_config(
                 TlsConfig::builder()
                     .provider(TlsProvider::NativeTls)
@@ -97,11 +107,22 @@ pub fn list_models(url: &str, api_key: Option<&str>) -> AppResult<Vec<String>> {
     Ok(names)
 }
 
+/// Ollama's `keep_alive`: seconds, or -1 to keep the model loaded until told otherwise.
+fn keep_alive(secs: Option<u64>) -> Value {
+    secs.map_or(json!(-1), |secs| json!(secs))
+}
+
+fn options() -> Value {
+    json!({ "num_ctx": NUM_CTX, "num_predict": NUM_PREDICT })
+}
+
 pub struct Ollama {
     url: String,
     model: String,
     api_key: Option<Zeroizing<String>>,
     cancel: Arc<AtomicBool>,
+    /// `None`: until Coffer quits (see `settings::AssistantSettings::keep_alive_secs`).
+    keep_alive_secs: Option<u64>,
 }
 
 impl Ollama {
@@ -116,7 +137,86 @@ impl Ollama {
             model: model.trim().to_string(),
             api_key,
             cancel,
+            keep_alive_secs: None,
         })
+    }
+
+    pub fn keep_alive(mut self, secs: Option<u64>) -> Self {
+        self.keep_alive_secs = secs;
+        self
+    }
+
+    fn authorized<B>(&self, request: RequestBuilder<B>) -> RequestBuilder<B> {
+        match &self.api_key {
+            Some(key) => request.header("Authorization", format!("Bearer {}", key.as_str())),
+            None => request,
+        }
+    }
+
+    /// Whether the model is in memory with the context length replies use.
+    pub fn loaded(&self) -> AppResult<bool> {
+        let url = &self.url;
+        let request = agent_with(Some(QUICK_TIMEOUT)).get(format!("{url}/api/ps"));
+        let mut response = self
+            .authorized(request)
+            .call()
+            .map_err(|e| unreachable(url, &e))?;
+        let status = response.status().as_u16();
+        let body = response
+            .body_mut()
+            .read_to_string()
+            .map_err(|e| unreachable(url, &e))?;
+        if status != 200 {
+            return Err(server_error(status, &body));
+        }
+        let value: Value = serde_json::from_str(&body)
+            .map_err(|_| AppError::Network(format!("{url} is not an Ollama server")))?;
+        Ok(value["models"].as_array().into_iter().flatten().any(|m| {
+            let named = [&m["name"], &m["model"]]
+                .iter()
+                .any(|name| name.as_str() == Some(self.model.as_str()));
+            let context = m["context_length"].as_u64();
+            named && context.is_none_or(|c| c == u64::from(NUM_CTX))
+        }))
+    }
+
+    /// Loads the model the way replies use it, and returns once it is in memory.
+    pub fn load(&self) -> AppResult<()> {
+        let url = &self.url;
+        let request = agent().post(format!("{url}/api/chat"));
+        let body = json!({
+            "model": self.model,
+            "messages": [],
+            "keep_alive": keep_alive(self.keep_alive_secs),
+            "options": options(),
+        });
+        let response = self
+            .authorized(request)
+            .send_json(&body)
+            .map_err(|e| unreachable(url, &e))?;
+        let status = response.status().as_u16();
+        let text = response.into_body().read_to_string().unwrap_or_default();
+        if status != 200 {
+            return Err(server_error(status, &text));
+        }
+        Ok(())
+    }
+
+    /// Asks the server to free the model's memory now.
+    pub fn unload(&self) -> AppResult<()> {
+        let url = &self.url;
+        let request = agent_with(Some(QUICK_TIMEOUT)).post(format!("{url}/api/generate"));
+        let body = json!({ "model": self.model, "keep_alive": 0 });
+        let response = self
+            .authorized(request)
+            .send_json(&body)
+            .map_err(|e| unreachable(url, &e))?;
+        let status = response.status().as_u16();
+        if status != 200 {
+            let text = response.into_body().read_to_string().unwrap_or_default();
+            return Err(server_error(status, &text));
+        }
+        Ok(())
     }
 
     fn body(&self, request: &Request) -> Value {
@@ -127,7 +227,8 @@ impl Ollama {
             "messages": messages,
             "stream": true,
             "think": false,
-            "options": { "num_ctx": NUM_CTX, "num_predict": NUM_PREDICT },
+            "keep_alive": keep_alive(self.keep_alive_secs),
+            "options": options(),
         });
         if let Some(tools) = request.tools {
             body["tools"] = tools.clone();
@@ -183,10 +284,7 @@ impl Model for Ollama {
     /// closes the connection and stops the generation.
     fn chat(&self, request: &Request, on_text: &mut dyn FnMut(&str)) -> AppResult<Reply> {
         let url = self.url.clone();
-        let mut http = agent().post(format!("{url}/api/chat"));
-        if let Some(key) = &self.api_key {
-            http = http.header("Authorization", format!("Bearer {}", key.as_str()));
-        }
+        let http = self.authorized(agent().post(format!("{url}/api/chat")));
         let body = self.body(request);
         let (tx, rx) = mpsc::channel();
         thread::spawn(move || {
@@ -308,6 +406,7 @@ mod tests {
         });
         assert_eq!(body["think"], false);
         assert_eq!(body["options"]["num_ctx"], NUM_CTX);
+        assert_eq!(body["keep_alive"], -1);
         assert_eq!(body["messages"][0]["role"], "system");
         assert_eq!(
             body["messages"][2]["tool_calls"][0]["function"]["arguments"]["query"],
@@ -320,5 +419,11 @@ mod tests {
             tools: None,
         });
         assert!(body.get("tools").is_none());
+    }
+
+    #[test]
+    fn keeps_the_model_loaded_as_configured() {
+        assert_eq!(keep_alive(Some(3600)), json!(3600));
+        assert_eq!(keep_alive(None), json!(-1));
     }
 }

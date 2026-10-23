@@ -21,6 +21,7 @@ const ASSISTANT_URL: &str = "assistant_url";
 const ASSISTANT_MODEL: &str = "assistant_model";
 const ASSISTANT_CONTEXT: &str = "assistant_context";
 const ASSISTANT_KEY_SET: &str = "assistant_key_set";
+const ASSISTANT_KEEP_ALIVE: &str = "assistant_keep_alive_secs";
 const MCP_ACCESS: &str = "mcp_access";
 const CAPTURE_SHORTCUT: &str = "capture_shortcut";
 
@@ -33,6 +34,8 @@ pub const CLIPBOARD_CLEAR_CHOICES: &[u64] = &[30, 60];
 const DEFAULT_CLIPBOARD_CLEAR: u64 = 30;
 pub const DEFAULT_ASSISTANT_URL: &str = "http://localhost:11434";
 pub const DEFAULT_ASSISTANT_MODEL: &str = "qwen3.8:27b";
+pub const KEEP_ALIVE_CHOICES: &[u64] = &[30 * 60, 60 * 60, 4 * 60 * 60];
+const DEFAULT_KEEP_ALIVE: u64 = 60 * 60;
 /// Option+Shift+Space: free in macOS and the common apps, unlike Option+Space (a no-break space).
 pub const DEFAULT_CAPTURE_SHORTCUT: &str = "Alt+Shift+Space";
 
@@ -75,6 +78,9 @@ pub struct AssistantSettings {
     pub context: String,
     /// An API key is stored in the Keychain; the key itself is never read for settings.
     pub has_api_key: bool,
+    /// How long the server keeps the model loaded after a request. `None`: while Coffer is
+    /// open, unloaded when it quits.
+    pub keep_alive_secs: Option<u64>,
 }
 
 impl Settings {
@@ -163,6 +169,7 @@ pub fn load(conn: &Connection) -> AppResult<Settings> {
                 .unwrap_or_else(|| DEFAULT_ASSISTANT_MODEL.to_string()),
             context: get(conn, ASSISTANT_CONTEXT)?.unwrap_or_default(),
             has_api_key: get_flag(conn, ASSISTANT_KEY_SET, false)?,
+            keep_alive_secs: get_secs(conn, ASSISTANT_KEEP_ALIVE, DEFAULT_KEEP_ALIVE)?,
         },
         mcp_access: mcp_access(conn)?,
         capture_shortcut: capture_shortcut(conn)?,
@@ -211,6 +218,10 @@ pub fn set_assistant(conn: &Connection, url: &str, model: &str, context: &str) -
     set(conn, ASSISTANT_CONTEXT, context)
 }
 
+pub fn set_assistant_keep_alive(conn: &Connection, secs: Option<u64>) -> AppResult<()> {
+    set_secs(conn, ASSISTANT_KEEP_ALIVE, secs, KEEP_ALIVE_CHOICES)
+}
+
 pub fn set_assistant_key_set(conn: &Connection, on: bool) -> AppResult<()> {
     set_flag(conn, ASSISTANT_KEY_SET, on)
 }
@@ -253,6 +264,7 @@ mod tests {
         assert_eq!(settings.assistant.url, DEFAULT_ASSISTANT_URL);
         assert_eq!(settings.assistant.model, DEFAULT_ASSISTANT_MODEL);
         assert!(settings.assistant.context.is_empty() && !settings.assistant.has_api_key);
+        assert_eq!(settings.assistant.keep_alive_secs, Some(DEFAULT_KEEP_ALIVE));
         assert!(!settings.mcp_access);
         assert_eq!(
             settings.capture_shortcut.as_deref(),
@@ -278,10 +290,13 @@ mod tests {
         set_unlock_window(&conn, None).unwrap();
         set_clipboard_clear(&conn, Some(60)).unwrap();
         assert!(set_unlock_window(&conn, Some(42)).is_err());
+        set_assistant_keep_alive(&conn, None).unwrap();
+        assert!(set_assistant_keep_alive(&conn, Some(42)).is_err());
 
         let settings = load(&conn).unwrap();
         assert_eq!(settings.unlock_window(), None);
         assert_eq!(settings.clipboard_clear_secs, Some(60));
+        assert_eq!(settings.assistant.keep_alive_secs, None);
     }
 
     #[test]

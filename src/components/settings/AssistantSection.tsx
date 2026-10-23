@@ -10,6 +10,13 @@ import { Select } from "../ui/Select";
 import { SettingRow } from "./SettingRow";
 import styles from "./Settings.module.css";
 
+const KEEP_ALIVE_OPTIONS = [
+  { value: 30 * 60, label: "30 minutes" },
+  { value: 60 * 60, label: "1 hour" },
+  { value: 4 * 60 * 60, label: "4 hours" },
+  { value: null, label: "While Coffer is open" },
+];
+
 type Check =
   { state: "checking" } | { state: "ok"; models: string[] } | { state: "failed"; message: string };
 
@@ -25,6 +32,7 @@ export function AssistantSection({ assistant: saved, onChange, session, run }: P
   const [url, setUrl] = useState(saved.url);
   const [model, setModel] = useState(saved.model);
   const [context, setContext] = useState(saved.context);
+  const [keepAlive, setKeepAlive] = useState(saved.keepAliveSecs);
   /** A newly typed key; empty keeps the stored one. */
   const [apiKey, setApiKey] = useState("");
   const [removeKey, setRemoveKey] = useState(false);
@@ -51,6 +59,7 @@ export function AssistantSection({ assistant: saved, onChange, session, run }: P
     url.trim() !== saved.url ||
     model.trim() !== saved.model ||
     context.trim() !== saved.context ||
+    keepAlive !== saved.keepAliveSecs ||
     apiKey !== "" ||
     removeKey;
 
@@ -60,7 +69,7 @@ export function AssistantSection({ assistant: saved, onChange, session, run }: P
       try {
         const key = removeKey ? "" : apiKey || null;
         const next = await session.withUnlock(() =>
-          api.saveAssistantSettings(url, model, context, key),
+          api.saveAssistantSettings(url, model, context, key, keepAlive),
         );
         onChange(next.assistant);
         setUrl(next.assistant.url);
@@ -104,6 +113,14 @@ export function AssistantSection({ assistant: saved, onChange, session, run }: P
             onChange={(e) => setModel(e.target.value)}
           />
         )}
+      </SettingRow>
+      <SettingRow label="Keep model loaded">
+        <Select
+          label="Keep model loaded"
+          value={keepAlive}
+          options={KEEP_ALIVE_OPTIONS}
+          onChange={setKeepAlive}
+        />
       </SettingRow>
       <SettingRow label="API key">
         <Input

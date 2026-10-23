@@ -76,6 +76,7 @@ pub fn run() {
             capture_cmd::open_in_coffer,
             assistant_cmd::save_assistant_settings,
             assistant_cmd::assistant_models,
+            assistant_cmd::warm_up_assistant,
             assistant_cmd::list_conversations,
             assistant_cmd::get_conversation,
             assistant_cmd::rename_conversation,
@@ -129,6 +130,11 @@ pub fn run() {
                 window.app_handle().exit(0);
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                assistant_cmd::unload_model(&app.state::<AppState>());
+            }
+        });
 }

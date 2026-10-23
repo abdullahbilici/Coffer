@@ -33,7 +33,7 @@ use crate::{
     crypto::{self, VaultKey},
     db::{
         Change, SecureBody, conversations,
-        settings::{self, Settings},
+        settings::{self, AssistantSettings, Settings},
     },
     error::{AppError, AppResult},
     state::AppState,
@@ -53,6 +53,8 @@ const ASSISTANT_EVENT: &str = "assistant-event";
 const VAULT_CHANGED: &str = "vault-changed";
 
 const MAX_CONTEXT_LEN: usize = 20_000;
+/// A warm-up is on its way; the next one waits for it to finish.
+static WARMING: AtomicBool = AtomicBool::new(false);
 /// Longest text an import takes at once.
 const MAX_PASTE_LEN: usize = 200_000;
 
@@ -146,6 +148,7 @@ pub fn save_assistant_settings(
     model: String,
     context: String,
     api_key: Option<String>,
+    keep_alive_secs: Option<u64>,
 ) -> AppResult<Settings> {
     let api_key = api_key.map(Zeroizing::new);
     let conn = state.db();
@@ -167,6 +170,7 @@ pub fn save_assistant_settings(
             settings::set_assistant_key_set(&conn, true)?;
         }
     }
+    settings::set_assistant_keep_alive(&conn, keep_alive_secs)?;
     settings::set_assistant(&conn, &url, &model, context.trim())?;
     settings::load(&conn)
 }
@@ -178,6 +182,51 @@ fn stored_api_key() -> AppResult<Option<Zeroizing<String>>> {
     String::from_utf8(bytes.to_vec())
         .map(|key| Some(Zeroizing::new(key)))
         .map_err(|_| AppError::Keychain("Corrupted assistant API key".to_string()))
+}
+
+/// The configured model server, keeping the model loaded as long as the settings say.
+fn model_for(assistant: &AssistantSettings, cancel: Arc<AtomicBool>) -> AppResult<Ollama> {
+    let api_key = if assistant.has_api_key {
+        stored_api_key()?
+    } else {
+        None
+    };
+    Ok(
+        Ollama::new(&assistant.url, &assistant.model, api_key, cancel)?
+            .keep_alive(assistant.keep_alive_secs),
+    )
+}
+
+/// Loads the model in the background if it isn't loaded, so it is ready by the time the user
+/// has typed. Returns at once.
+#[tauri::command]
+pub fn warm_up_assistant(state: State<AppState>) -> AppResult<()> {
+    state.session().require_entered()?;
+    let assistant = settings::load(&state.db())?.assistant;
+    if WARMING.swap(true, Ordering::SeqCst) {
+        return Ok(());
+    }
+    thread::spawn(move || {
+        if let Ok(model) = model_for(&assistant, Arc::default())
+            && matches!(model.loaded(), Ok(false))
+        {
+            let _ = model.load();
+        }
+        WARMING.store(false, Ordering::SeqCst);
+    });
+    Ok(())
+}
+
+/// On quit, frees the model a "while Coffer is open" setting kept loaded.
+pub fn unload_model(state: &AppState) {
+    let Ok(settings) = settings::load(&state.db()) else {
+        return;
+    };
+    if settings.assistant.keep_alive_secs.is_none()
+        && let Ok(model) = model_for(&settings.assistant, Arc::default())
+    {
+        let _ = model.unload();
+    }
 }
 
 /// Checks a server and lists its models. Takes the form's values, so a URL can be tried before
@@ -346,17 +395,7 @@ fn reply(app: &AppHandle, id: i64, cancel: &Arc<AtomicBool>) -> AppResult<()> {
         .into_iter()
         .map(|m| m.turn)
         .collect();
-    let api_key = if assistant.has_api_key {
-        stored_api_key()?
-    } else {
-        None
-    };
-    let model = Ollama::new(
-        &assistant.url,
-        &assistant.model,
-        api_key,
-        Arc::clone(cancel),
-    )?;
+    let model = model_for(&assistant, Arc::clone(cancel))?;
     let chat = system_prompt(&local_today("EEEE, d MMMM yyyy"), &assistant.context);
     let import = import_prompt(&assistant.context);
     let today = local_today("yyyy-MM-dd");
