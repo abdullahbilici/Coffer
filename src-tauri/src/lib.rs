@@ -9,6 +9,7 @@ mod db;
 mod dev;
 mod error;
 mod lock_events;
+mod mcp;
 mod secrets;
 #[cfg(debug_assertions)]
 mod seed;
@@ -22,6 +23,7 @@ use commands::{
     assistant as assistant_cmd, backup as backup_cmd, folders, items, payments, pins, projects,
     session as session_cmd, settings, todos, vault,
 };
+pub use mcp::serve as serve_mcp;
 use state::AppState;
 
 /// Dev builds keep their own vault file (see `dev::db_file`), so testing (and `npm run reseed`)
@@ -57,6 +59,8 @@ pub fn run() {
             settings::set_unlock_window,
             settings::set_clipboard_clear,
             settings::clear_clipboard_later,
+            settings::set_mcp_access,
+            settings::mcp_command,
             assistant_cmd::save_assistant_settings,
             assistant_cmd::assistant_models,
             assistant_cmd::list_conversations,

@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { DatabaseBackup, type LucideIcon, SlidersHorizontal, Sparkles, X } from "lucide-react";
+import {
+  Cable,
+  DatabaseBackup,
+  type LucideIcon,
+  SlidersHorizontal,
+  Sparkles,
+  X,
+} from "lucide-react";
 import type { Copy, Run } from "../../app/actions";
 import type { Appearance } from "../../hooks/useAppearance";
 import type { Session } from "../../hooks/useSession";
@@ -9,14 +16,16 @@ import { IconButton } from "../ui/IconButton";
 import { AssistantSection } from "./AssistantSection";
 import { BackupSection } from "./BackupSection";
 import { GeneralSection } from "./GeneralSection";
+import { IntegrationsSection } from "./IntegrationsSection";
 import styles from "./SettingsModal.module.css";
 
-type Section = "general" | "backup" | "assistant";
+type Section = "general" | "backup" | "assistant" | "integrations";
 
 const SECTIONS: { id: Section; label: string; icon: LucideIcon }[] = [
   { id: "general", label: "General", icon: SlidersHorizontal },
   { id: "backup", label: "Backup", icon: DatabaseBackup },
   { id: "assistant", label: "Assistant", icon: Sparkles },
+  { id: "integrations", label: "Integrations", icon: Cable },
 ];
 
 type Props = {
@@ -101,6 +110,15 @@ export function SettingsModal(props: Props) {
                 onChange={(assistant) => setSettings({ ...settings, assistant })}
                 session={session}
                 run={run}
+              />
+            )}
+            {section === "integrations" && settings && (
+              <IntegrationsSection
+                mcpAccess={settings.mcpAccess}
+                onChange={(mcpAccess) => setSettings({ ...settings, mcpAccess })}
+                session={session}
+                run={run}
+                onCopy={props.onCopy}
               />
             )}
           </div>

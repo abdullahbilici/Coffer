@@ -8,9 +8,9 @@ pub mod settings;
 pub mod todos;
 pub mod vault;
 
-use std::path::Path;
+use std::{path::Path, time::Duration};
 
-use rusqlite::Connection;
+use rusqlite::{Connection, OpenFlags};
 
 use crate::{
     error::{AppError, AppResult},
@@ -182,11 +182,40 @@ fn upgrade_secret_markers(conn: &Connection) -> AppResult<()> {
     Ok(())
 }
 
+/// How long a connection waits for another one to finish instead of failing at once: `coffer
+/// --mcp` reads the file while the app may be writing it. Both take milliseconds.
+const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
+
 pub fn open(path: &Path) -> AppResult<Connection> {
     let conn = Connection::open(path)?;
+    conn.busy_timeout(BUSY_TIMEOUT)?;
     conn.pragma_update(None, "foreign_keys", true)?;
     migrate(&conn)?;
     Ok(conn)
+}
+
+/// Opens an existing vault that this connection can never write: no migrations, no schema
+/// changes. A vault the app hasn't migrated yet is refused rather than misread.
+pub fn open_read_only(path: &Path) -> AppResult<Connection> {
+    if !path.exists() {
+        return Err(AppError::File(format!("No vault at {}", path.display())));
+    }
+    let conn = Connection::open_with_flags(
+        path,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )?;
+    conn.busy_timeout(BUSY_TIMEOUT)?;
+    conn.pragma_update(None, "query_only", true)?;
+    let applied: i64 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    match applied.cmp(&(MIGRATIONS.len() as i64)) {
+        std::cmp::Ordering::Equal => Ok(conn),
+        std::cmp::Ordering::Less => Err(AppError::Invalid(
+            "Open Coffer once to update the vault".to_string(),
+        )),
+        std::cmp::Ordering::Greater => Err(AppError::Invalid(
+            "The vault is from a newer Coffer".to_string(),
+        )),
+    }
 }
 
 fn migrate(conn: &Connection) -> AppResult<()> {

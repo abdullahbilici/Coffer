@@ -48,6 +48,8 @@ export type Settings = {
   clipboardClearSecs: number | null;
   backup: BackupSettings;
   assistant: AssistantSettings;
+  /** `coffer --mcp` may answer an MCP client. */
+  mcpAccess: boolean;
 };
 
 export type Conversation = {
@@ -247,6 +249,9 @@ export const api = {
   setUnlockWindow: (secs: number | null) => invoke<SessionInfo>("set_unlock_window", { secs }),
   setClipboardClear: (secs: number | null) => invoke<void>("set_clipboard_clear", { secs }),
   clearClipboardLater: () => invoke<void>("clear_clipboard_later"),
+  setMcpAccess: (on: boolean) => invoke<void>("set_mcp_access", { on }),
+  /** The `claude mcp add` command for the running app. */
+  mcpCommand: () => invoke<string>("mcp_command"),
 
   /** `apiKey`: `null` keeps the stored key, `""` removes it. */
   saveAssistantSettings: (url: string, model: string, context: string, apiKey: string | null) =>

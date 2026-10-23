@@ -20,6 +20,7 @@ const ASSISTANT_URL: &str = "assistant_url";
 const ASSISTANT_MODEL: &str = "assistant_model";
 const ASSISTANT_CONTEXT: &str = "assistant_context";
 const ASSISTANT_KEY_SET: &str = "assistant_key_set";
+const MCP_ACCESS: &str = "mcp_access";
 
 /// Stored for an optional duration that is switched off ("until screen locks", "never").
 const OFF: &str = "off";
@@ -40,6 +41,8 @@ pub struct Settings {
     pub clipboard_clear_secs: Option<u64>,
     pub backup: BackupSettings,
     pub assistant: AssistantSettings,
+    /// `coffer --mcp` may answer an MCP client. Off by default.
+    pub mcp_access: bool,
 }
 
 #[derive(Serialize)]
@@ -151,6 +154,7 @@ pub fn load(conn: &Connection) -> AppResult<Settings> {
             context: get(conn, ASSISTANT_CONTEXT)?.unwrap_or_default(),
             has_api_key: get_flag(conn, ASSISTANT_KEY_SET, false)?,
         },
+        mcp_access: mcp_access(conn)?,
     })
 }
 
@@ -196,6 +200,14 @@ pub fn set_assistant_key_set(conn: &Connection, on: bool) -> AppResult<()> {
     set_flag(conn, ASSISTANT_KEY_SET, on)
 }
 
+pub fn mcp_access(conn: &Connection) -> AppResult<bool> {
+    get_flag(conn, MCP_ACCESS, false)
+}
+
+pub fn set_mcp_access(conn: &Connection, on: bool) -> AppResult<()> {
+    set_flag(conn, MCP_ACCESS, on)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -213,6 +225,7 @@ mod tests {
         assert_eq!(settings.assistant.url, DEFAULT_ASSISTANT_URL);
         assert_eq!(settings.assistant.model, DEFAULT_ASSISTANT_MODEL);
         assert!(settings.assistant.context.is_empty() && !settings.assistant.has_api_key);
+        assert!(!settings.mcp_access);
     }
 
     #[test]
