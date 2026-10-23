@@ -70,9 +70,10 @@
   min-width: 30px;
 }
 
-.thinking {
-  composes: thinking from "../components/views/Assistant.module.css";
+.replyStatus {
+  composes: replyStatus from "../components/views/Assistant.module.css";
   padding: 0 var(--space-2);
+  white-space: nowrap;
 }
 
 .copied {

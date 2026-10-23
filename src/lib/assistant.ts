@@ -1,4 +1,4 @@
-import type { DraftGroup, DraftStatus, Message, ToolCall, Tree } from "./api";
+import type { DraftGroup, DraftStatus, Message, ReplyPhase, ToolCall, Tree } from "./api";
 
 /**
  * A secret handle the assistant writes: `[n12.0]` (note 12, secret 0, or value 0 of a secure
@@ -30,6 +30,46 @@ const id = (value: unknown): number | null => {
 };
 
 /** A calm one-line description of a tool call, e.g. "Searched for aws". */
+/** What each tool is, for the status while it runs ("Using search"). */
+const TOOL_NAMES: Record<string, string> = {
+  list_projects: "projects",
+  get_project: "project",
+  list_folder: "folder",
+  search: "search",
+  get_note: "note",
+  list_todos: "todos",
+  list_payments: "payments",
+  project_spend: "spend",
+};
+
+/**
+ * The quiet status under a reply in progress: the model loading, reading the prompt, writing
+ * (while nothing visible has streamed yet), or a tool running: a read tool by name, a write
+ * tool as drafting. `null` shows nothing.
+ */
+export function replyStatus(
+  messages: Message[],
+  phase: ReplyPhase | null,
+  streaming: string,
+): string | null {
+  if (phase === "loading") return "Loading model";
+  // The calls of the last model turn, followed by the results that are in so far.
+  let at = messages.length - 1;
+  while (at >= 0 && messages[at].role === "tool") at--;
+  const last = at >= 0 ? messages[at] : undefined;
+  if (last?.role === "assistant") {
+    const done = new Set(messages.slice(at).flatMap((m) => (m.role === "tool" ? [m.callId] : [])));
+    const running = last.toolCalls.find((c) => !done.has(c.id));
+    if (running) {
+      const name = TOOL_NAMES[running.name];
+      return name ? `Using ${name}` : "Drafting";
+    }
+  }
+  if (phase === "reading") return "Reading";
+  if (phase === "writing" && !streaming) return "Writing";
+  return null;
+}
+
 export function toolLabel(call: ToolCall, tree: Tree, result?: string): string {
   const label = describe(call, tree);
   return result?.startsWith("Error:") ? label.replace(/^Drafted /, "Couldn't draft ") : label;

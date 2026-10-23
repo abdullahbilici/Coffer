@@ -19,7 +19,13 @@ import type { Copy, Run, VaultActions } from "../../app/actions";
 import type { Thread } from "../../hooks/useAssistant";
 import type { Session } from "../../hooks/useSession";
 import type { ToolCall, Tree } from "../../lib/api";
-import { replySources, threadBlocks, toolLabel, type Block } from "../../lib/assistant";
+import {
+  replySources,
+  replyStatus,
+  threadBlocks,
+  toolLabel,
+  type Block,
+} from "../../lib/assistant";
 import { cx } from "../../lib/cx";
 import { AssistantReply } from "./AssistantReply";
 import { DraftCard } from "./DraftCard";
@@ -75,11 +81,13 @@ export function AssistantThread({ thread, replying, onApply, onDiscard, ...share
     return map;
   }, [thread.messages]);
 
+  const status = replying ? replyStatus(thread.messages, thread.phase, thread.streaming) : null;
+
   // Follows the reply while the user is at the bottom; scrolling up stops following.
   useLayoutEffect(() => {
     const el = scroller.current;
     if (el && stick.current) el.scrollTop = el.scrollHeight;
-  }, [thread.messages, thread.streaming, thread.error, replying]);
+  }, [thread.messages, thread.streaming, thread.error, replying, status]);
 
   useLayoutEffect(() => {
     stick.current = true;
@@ -88,8 +96,6 @@ export function AssistantThread({ thread, replying, onApply, onDiscard, ...share
   }, [thread.opened]);
 
   const blocks = useMemo(() => threadBlocks(thread.messages), [thread.messages]);
-  const last = thread.messages.at(-1);
-  const waiting = replying && !thread.streaming && (last?.role === "user" || last?.role === "tool");
 
   return (
     <div
@@ -125,12 +131,10 @@ export function AssistantThread({ thread, replying, onApply, onDiscard, ...share
               onCopy={shared.onCopy}
             />
           )}
-          {waiting && (
-            <span className={styles.thinking} aria-label="Thinking">
-              <span />
-              <span />
-              <span />
-            </span>
+          {status && (
+            <p key={status} className={styles.replyStatus} role="status">
+              {status}
+            </p>
           )}
           {thread.error && <p className={styles.error}>{thread.error}</p>}
         </div>

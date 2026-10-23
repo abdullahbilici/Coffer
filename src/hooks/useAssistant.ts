@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import type { Run } from "../app/actions";
-import { api, type AssistantEvent, type Conversation, type Message } from "../lib/api";
+import {
+  api,
+  type AssistantEvent,
+  type Conversation,
+  type Message,
+  type ReplyPhase,
+} from "../lib/api";
 import type { Session } from "./useSession";
 
 export type Assistant = ReturnType<typeof useAssistant>;
@@ -15,13 +21,22 @@ export type Thread = {
   messages: Message[];
   /** Reply text streaming in, not stored yet. */
   streaming: string;
+  /** Where the model call in progress is; `null` between calls and once the reply ends. */
+  phase: ReplyPhase | null;
   /** Why the last reply failed. */
   error: string | null;
   /** Changes whenever another conversation is opened, not when a new chat gets its id. */
   opened: number;
 };
 
-const NEW_THREAD: Thread = { id: null, messages: [], streaming: "", error: null, opened: 0 };
+const NEW_THREAD: Thread = {
+  id: null,
+  messages: [],
+  streaming: "",
+  phase: null,
+  error: null,
+  opened: 0,
+};
 
 /**
  * Starts loading the model if the server has unloaded it, so the wait happens while the user
@@ -81,6 +96,11 @@ export function useAssistant(session: Session, run: Run, reload: () => Promise<v
         if (!frame.current) frame.current = requestAnimationFrame(flush);
         return;
       }
+      if (event.type === "phase") {
+        const { phase } = event;
+        setThread((t) => (t.id === id ? { ...t, phase } : t));
+        return;
+      }
       // Anything else ends the streamed text: it was stored, or the reply ended.
       cancelAnimationFrame(frame.current);
       frame.current = 0;
@@ -91,7 +111,9 @@ export function useAssistant(session: Session, run: Run, reload: () => Promise<v
           updated(list, id, (c) => ({ ...c, updatedAt: message.createdAt })),
         );
         setThread((t) =>
-          t.id === id ? { ...t, messages: [...t.messages, message], streaming: "" } : t,
+          t.id === id
+            ? { ...t, messages: [...t.messages, message], streaming: "", phase: null }
+            : t,
         );
       } else {
         // Quick capture starts conversations of its own; a loaded list picks them up.
@@ -103,7 +125,7 @@ export function useAssistant(session: Session, run: Run, reload: () => Promise<v
         }
         setConversations((list) => updated(list, id, (c) => ({ ...c, replying: false })));
         const error = event.type === "failed" ? event.message : null;
-        setThread((t) => (t.id === id ? { ...t, streaming: "", error } : t));
+        setThread((t) => (t.id === id ? { ...t, streaming: "", phase: null, error } : t));
       }
     };
     const unlisten = listen<AssistantEvent>(ASSISTANT_EVENT, (e) => onEvent(e.payload));
@@ -133,7 +155,7 @@ export function useAssistant(session: Session, run: Run, reload: () => Promise<v
           return;
         }
         const messages = await session.withUnlock(() => api.getConversation(id));
-        setThread({ id, messages, streaming: "", error: null, opened: Date.now() });
+        setThread({ ...NEW_THREAD, id, messages, opened: Date.now() });
       }),
     [run, session],
   );

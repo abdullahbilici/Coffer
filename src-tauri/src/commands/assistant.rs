@@ -26,7 +26,7 @@ use crate::{
         DraftStatus, Turn, draft,
         handles::{self, Handle},
         import_prompt, inputs,
-        ollama::{self, Ollama},
+        ollama::{self, Ollama, Phase},
         reply::{self, Io, Prompts},
         system_prompt, title_from,
     },
@@ -96,6 +96,11 @@ enum AssistantEvent {
     Text {
         conversation_id: i64,
         text: String,
+    },
+    /// Where the model call in progress is: loading the model, reading, writing.
+    Phase {
+        conversation_id: i64,
+        phase: Phase,
     },
     /// A stored turn of the reply.
     Message {
@@ -395,7 +400,16 @@ fn reply(app: &AppHandle, id: i64, cancel: &Arc<AtomicBool>) -> AppResult<()> {
         .into_iter()
         .map(|m| m.turn)
         .collect();
-    let model = model_for(&assistant, Arc::clone(cancel))?;
+    let phases = app.clone();
+    let model = model_for(&assistant, Arc::clone(cancel))?.on_phase(move |phase| {
+        let _ = phases.emit(
+            ASSISTANT_EVENT,
+            AssistantEvent::Phase {
+                conversation_id: id,
+                phase,
+            },
+        );
+    });
     let chat = system_prompt(&local_today("EEEE, d MMMM yyyy"), &assistant.context);
     let import = import_prompt(&assistant.context);
     let today = local_today("yyyy-MM-dd");

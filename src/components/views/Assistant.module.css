@@ -357,29 +357,16 @@
   animation: fade var(--duration-base) var(--ease-out);
 }
 
-/* Three quiet dots while the model reads or a tool runs. */
-.thinking {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 24px;
-  animation: fade var(--duration-slow) var(--ease-out);
-}
-
-.thinking span {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--color-text-tertiary);
-  animation: pulse 1.4s var(--ease-out) infinite;
-}
-
-.thinking span:nth-child(2) {
-  animation-delay: 0.2s;
-}
-
-.thinking span:nth-child(3) {
-  animation-delay: 0.4s;
+/* Where a reply in progress is (Loading model, Reading, Using search): quiet, breathing. */
+.replyStatus {
+  margin: 0;
+  line-height: 24px;
+  font-size: var(--text-sm);
+  color: var(--color-text-tertiary);
+  user-select: none;
+  animation:
+    fade var(--duration-slow) var(--ease-out),
+    pulse 1.4s var(--ease-out) var(--duration-slow) infinite;
 }
 
 /* Composer, aligned with the messages above it. */

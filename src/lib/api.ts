@@ -103,9 +103,13 @@ export type Turn =
 export type Message = Turn & { id: number; createdAt: number };
 
 /** Mirrors `commands::assistant::AssistantEvent`. */
+/** Mirrors `assistant::ollama::Phase`: where the model call in progress is. */
+export type ReplyPhase = "loading" | "reading" | "writing";
+
 export type AssistantEvent =
   /** The reply's text so far. */
   | { type: "text"; conversationId: number; text: string }
+  | { type: "phase"; conversationId: number; phase: ReplyPhase }
   | { type: "message"; conversationId: number; message: Message }
   | { type: "done"; conversationId: number }
   | { type: "failed"; conversationId: number; message: string };

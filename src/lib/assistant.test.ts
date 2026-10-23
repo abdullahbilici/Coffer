@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Message, Tree } from "./api";
-import { replySources, threadBlocks, toolLabel, withSecretChips } from "./assistant";
+import { replySources, replyStatus, threadBlocks, toolLabel, withSecretChips } from "./assistant";
 
 const tree: Tree = {
   projects: [{ id: 1, name: "Acme" }],
@@ -167,5 +167,43 @@ describe("replySources", () => {
       call("b", "get_note", { id: 20 }),
     ]);
     expect(sources(both)).toEqual([{ kind: "item", id: 20 }]);
+  });
+});
+
+describe("replyStatus", () => {
+  const user: Message = { id: 1, createdAt: 0, role: "user", text: "hi" };
+  const calls = (...names: string[]): Message => ({
+    id: 2,
+    createdAt: 0,
+    role: "assistant",
+    text: "",
+    stopped: false,
+    toolCalls: names.map((name, i) => ({ id: `c${i}`, name, arguments: {} })),
+  });
+  const result = (callId: string): Message => ({
+    id: 3,
+    createdAt: 0,
+    role: "tool",
+    callId,
+    name: "search",
+    result: "",
+  });
+
+  it("names the phase of the model call", () => {
+    expect(replyStatus([user], "loading", "")).toBe("Loading model");
+    expect(replyStatus([user], "reading", "")).toBe("Reading");
+    expect(replyStatus([user], "writing", "")).toBe("Writing");
+    expect(replyStatus([user], "writing", "Hello")).toBeNull();
+    expect(replyStatus([user], null, "")).toBeNull();
+  });
+
+  it("names the tool that is running", () => {
+    expect(replyStatus([user, calls("search")], null, "")).toBe("Using search");
+    expect(replyStatus([user, calls("get_note", "search"), result("c0")], null, "")).toBe(
+      "Using search",
+    );
+    expect(replyStatus([user, calls("search"), result("c0")], "reading", "")).toBe("Reading");
+    expect(replyStatus([user, calls("add_field")], null, "")).toBe("Drafting");
+    expect(replyStatus([user, calls("search")], "loading", "")).toBe("Loading model");
   });
 });

@@ -12,9 +12,10 @@ use std::{
         mpsc::{self, RecvTimeoutError},
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
+use serde::Serialize;
 use serde_json::{Value, json};
 use ureq::{
     Agent, RequestBuilder,
@@ -27,8 +28,22 @@ use crate::error::{AppError, AppResult};
 
 /// How often a waiting reply checks for cancel.
 const CANCEL_POLL: Duration = Duration::from_millis(100);
+/// How often a reply waiting for the model to load asks whether it has.
+const LOAD_POLL: Duration = Duration::from_secs(1);
 /// Longest wait for a quick request (`/api/ps`, unloading): the model server is local.
 const QUICK_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// Where a model call is, for the status under a reply in progress.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Phase {
+    /// The server is loading the model into memory.
+    Loading,
+    /// The model reads the prompt; nothing has streamed yet.
+    Reading,
+    /// The answer streams in.
+    Writing,
+}
 
 /// Trims the URL and checks it is plain http(s) with a host, without a trailing slash.
 pub fn normalize_url(url: &str) -> AppResult<String> {
@@ -123,6 +138,7 @@ pub struct Ollama {
     cancel: Arc<AtomicBool>,
     /// `None`: until Coffer quits (see `settings::AssistantSettings::keep_alive_secs`).
     keep_alive_secs: Option<u64>,
+    on_phase: Option<Box<dyn Fn(Phase) + Send>>,
 }
 
 impl Ollama {
@@ -138,11 +154,18 @@ impl Ollama {
             api_key,
             cancel,
             keep_alive_secs: None,
+            on_phase: None,
         })
     }
 
     pub fn keep_alive(mut self, secs: Option<u64>) -> Self {
         self.keep_alive_secs = secs;
+        self
+    }
+
+    /// Reports where each model call is; without it no `/api/ps` requests are made.
+    pub fn on_phase(mut self, report: impl Fn(Phase) + Send + 'static) -> Self {
+        self.on_phase = Some(Box::new(report));
         self
     }
 
@@ -219,6 +242,12 @@ impl Ollama {
         Ok(())
     }
 
+    fn phase(&self, phase: Phase) {
+        if let Some(report) = &self.on_phase {
+            report(phase);
+        }
+    }
+
     fn body(&self, request: &Request) -> Value {
         let mut messages = vec![json!({ "role": "system", "content": request.system })];
         messages.extend(request.turns.iter().map(message));
@@ -283,6 +312,16 @@ impl Model for Ollama {
     /// loading the model or reading the prompt. Dropping the channel ends the reader, which
     /// closes the connection and stops the generation.
     fn chat(&self, request: &Request, on_text: &mut dyn FnMut(&str)) -> AppResult<Reply> {
+        // A model that isn't loaded yet takes a while before anything streams; say so.
+        let mut loading = self.on_phase.is_some() && !self.loaded().unwrap_or(true);
+        self.phase(if loading {
+            Phase::Loading
+        } else {
+            Phase::Reading
+        });
+        let mut asked = Instant::now();
+        let mut writing = false;
+
         let url = self.url.clone();
         let http = self.authorized(agent().post(format!("{url}/api/chat")));
         let body = self.body(request);
@@ -328,8 +367,21 @@ impl Model for Ollama {
                 Ok(Chunk::Line(line)) => line,
                 Ok(Chunk::End) | Err(RecvTimeoutError::Disconnected) => return Ok(reply),
                 Ok(Chunk::Failed(e)) => return Err(e),
-                Err(RecvTimeoutError::Timeout) => continue,
+                Err(RecvTimeoutError::Timeout) => {
+                    if loading && asked.elapsed() >= LOAD_POLL {
+                        asked = Instant::now();
+                        if self.loaded().unwrap_or(false) {
+                            loading = false;
+                            self.phase(Phase::Reading);
+                        }
+                    }
+                    continue;
+                }
             };
+            if !writing {
+                writing = true;
+                self.phase(Phase::Writing);
+            }
             if let Some(error) = line["error"].as_str() {
                 return Err(AppError::Network(error.to_string()));
             }

@@ -9,7 +9,7 @@ import { useAssistant, warmUp } from "../hooks/useAssistant";
 import { useSession } from "../hooks/useSession";
 import { useToast } from "../hooks/useToast";
 import { api, errorMessage } from "../lib/api";
-import { threadBlocks } from "../lib/assistant";
+import { replyStatus, threadBlocks } from "../lib/assistant";
 import { cx } from "../lib/cx";
 import { motion } from "../lib/motion";
 import type { Copy, Run } from "./actions";
@@ -76,6 +76,7 @@ export function Capture() {
   );
   const pendingDraft = blocks.some((b) => b.kind === "draft" && b.status === "pending");
   const settled = thread.id !== null && !replying && !pendingDraft;
+  const status = replyStatus(thread.messages, thread.phase, "") ?? "Reading";
   const settledRef = useRef(settled);
   settledRef.current = settled;
 
@@ -208,10 +209,8 @@ export function Capture() {
                 {toast.toast.message}
               </span>
             ) : replying ? (
-              <span className={styles.thinking} aria-label="Thinking">
-                <span />
-                <span />
-                <span />
+              <span key={status} className={styles.replyStatus} role="status">
+                {status}
               </span>
             ) : (
               thread.id !== null && (
