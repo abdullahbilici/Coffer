@@ -11,6 +11,18 @@
   margin-bottom: var(--space-1);
 }
 
+.inline {
+  flex-wrap: nowrap;
+  min-width: 0;
+  margin-left: 0;
+}
+
+.inline .crumb {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .crumb {
   padding: 1px 6px;
   border: none;

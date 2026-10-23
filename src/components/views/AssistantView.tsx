@@ -1,6 +1,6 @@
 import { useEffect, type RefObject } from "react";
 import { Fingerprint, SquarePen } from "lucide-react";
-import type { Copy, Run } from "../../app/actions";
+import type { Copy, Run, VaultActions } from "../../app/actions";
 import type { Assistant } from "../../hooks/useAssistant";
 import type { Session } from "../../hooks/useSession";
 import type { Tree } from "../../lib/api";
@@ -17,11 +17,20 @@ type Props = {
   session: Session;
   run: Run;
   onCopy: Copy;
+  actions: VaultActions;
   composerRef: RefObject<HTMLTextAreaElement | null>;
 };
 
 /** Conversations on the left; the open one with its composer on the right. */
-export function AssistantView({ assistant, tree, session, run, onCopy, composerRef }: Props) {
+export function AssistantView({
+  assistant,
+  tree,
+  session,
+  run,
+  onCopy,
+  actions,
+  composerRef,
+}: Props) {
   const { conversations, thread, load } = assistant;
 
   // Opening the view loads history, asking for Touch ID if the window is closed. Once loaded,
@@ -85,6 +94,7 @@ export function AssistantView({ assistant, tree, session, run, onCopy, composerR
               session={session}
               run={run}
               onCopy={onCopy}
+              actions={actions}
               onApply={assistant.applyDraft}
               onDiscard={assistant.discardDraft}
             />

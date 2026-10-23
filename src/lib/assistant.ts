@@ -1,9 +1,9 @@
 import type { DraftGroup, DraftStatus, Message, ToolCall, Tree } from "./api";
 
 /**
- * A secret handle the assistant writes: `[n12.0]` (note 12, secret 0), `[p3.0]` (project
- * overview), `[t4.0]` (todo), `[n12]` (a whole secure note). Mirrors `assistant/handles.rs`.
- * Models sometimes wrap it in backticks; those go too.
+ * A secret handle the assistant writes: `[n12.0]` (note 12, secret 0, or value 0 of a secure
+ * note), `[p3.0]` (project overview), `[t4.0]` (todo), `[n12]` (a whole secure note). Mirrors
+ * `assistant/handles.rs`. Models sometimes wrap it in backticks; those go too.
  */
 const HANDLE = /`?\[([npt]\d+(?:\.\d+)?)\]`?/g;
 
@@ -110,16 +110,21 @@ function describe(call: ToolCall, tree: Tree): string {
 /** What the thread shows, in order. Tool calls in a row form one group, whichever turns made them. */
 export type Block =
   | { kind: "user"; key: string; text: string; paste: string | null }
-  | { kind: "reply"; key: string; text: string }
+  | { kind: "reply"; key: string; text: string; read: Read }
   | { kind: "tools"; key: string; calls: ToolCall[] }
   | { kind: "stopped"; key: string }
   | { kind: "draft"; key: string; id: number; groups: DraftGroup[]; status: DraftStatus };
 
 export function threadBlocks(messages: Message[]): Block[] {
   const blocks: Block[] = [];
+  let read = emptyRead();
   for (const m of messages) {
     if (m.role === "user") {
       blocks.push({ kind: "user", key: `user:${m.id}`, text: m.text, paste: m.paste ?? null });
+      read = emptyRead();
+    }
+    if (m.role === "tool") {
+      for (const match of m.result.matchAll(NOTE_LINE)) read.notes.add(Number(match[1]));
     }
     if (m.role === "draft") {
       const { groups, status } = m;
@@ -129,7 +134,18 @@ export function threadBlocks(messages: Message[]): Block[] {
     // Words next to tool calls are the model thinking aloud ("Let me search…", or a summary
     // written before the tools ran); the answer is the turn without calls.
     if (m.text && m.toolCalls.length === 0) {
-      blocks.push({ kind: "reply", key: `reply:${m.id}`, text: m.text });
+      blocks.push({ kind: "reply", key: `reply:${m.id}`, text: m.text, read });
+    }
+    for (const call of m.toolCalls) {
+      const args = call.arguments ?? {};
+      if (call.name === "get_note") {
+        const note = id(args.id);
+        if (note !== null) read.opened.push(note);
+      }
+      if (call.name === "get_project") {
+        const project = text(args.project);
+        if (project) read.projects.push(project);
+      }
     }
     if (m.toolCalls.length > 0) {
       const last = blocks.at(-1);
@@ -139,4 +155,85 @@ export function threadBlocks(messages: Message[]): Block[] {
     if (m.stopped) blocks.push({ kind: "stopped", key: `stopped:${m.id}` });
   }
   return blocks;
+}
+
+/** What the tools of one exchange showed the model, for finding a reply's sources. */
+export type Read = {
+  /** Notes any tool result listed (`note 12: …`). */
+  notes: Set<number>;
+  /** Notes opened with get_note, in order. */
+  opened: number[];
+  /** Projects opened with get_project, as the model named them. */
+  projects: string[];
+};
+
+const emptyRead = (): Read => ({ notes: new Set(), opened: [], projects: [] });
+
+const NOTE_LINE = /\bnote (\d+): /g;
+
+export type ReplySource = { kind: "item"; id: number } | { kind: "project"; id: number };
+
+/**
+ * Where a reply's answer came from, in the order the reply first uses them: notes and overviews
+ * whose secrets it shows, and notes or projects the model read whose titles it names. A reply
+ * that names nothing but read a single note cites that note.
+ */
+export function replySources(reply: string, read: Read, tree: Tree): ReplySource[] {
+  const found: { at: number; source: ReplySource }[] = [];
+  const add = (at: number, source: ReplySource) => {
+    const same = found.find((f) => f.source.kind === source.kind && f.source.id === source.id);
+    if (same) same.at = Math.min(same.at, at);
+    else found.push({ at, source });
+  };
+  for (const match of reply.matchAll(HANDLE)) {
+    const source = handleSource(match[1], tree);
+    if (source) add(match.index, source);
+  }
+  const lower = reply.toLowerCase();
+  const named = (name: string) =>
+    name.trim().length >= 3 ? lower.indexOf(name.toLowerCase()) : -1;
+  for (const item of tree.items) {
+    if (!read.notes.has(item.id) && !read.opened.includes(item.id)) continue;
+    const at = named(item.title);
+    if (at >= 0) add(at, { kind: "item", id: item.id });
+  }
+  const opened = new Set(read.opened);
+  if (found.length === 0 && opened.size === 1) {
+    const only = tree.items.find((i) => opened.has(i.id));
+    if (only) add(0, { kind: "item", id: only.id });
+  }
+  for (const asked of read.projects) {
+    const project = findProject(asked, tree);
+    if (!project) continue;
+    const at = named(project.name);
+    const covered = found.some(
+      (f) =>
+        f.source.kind === "item" &&
+        tree.items.find((i) => i.id === f.source.id)?.projectId === project.id,
+    );
+    if (at >= 0 && !covered) add(at, { kind: "project", id: project.id });
+  }
+  return found.sort((a, b) => a.at - b.at).map((f) => f.source);
+}
+
+/** The note or project a handle (`n12.0`, `p3.0`, `t4.0`) belongs to, if it is in the tree. */
+export function handleSource(handle: string, tree: Tree): ReplySource | null {
+  const id = Number(handle.slice(1).split(".")[0]);
+  if (handle.startsWith("n") && tree.items.some((i) => i.id === id)) return { kind: "item", id };
+  if (handle.startsWith("p") && tree.projects.some((p) => p.id === id)) {
+    return { kind: "project", id };
+  }
+  const itemId = handle.startsWith("t") ? tree.todos.find((t) => t.id === id)?.itemId : null;
+  return itemId != null ? { kind: "item", id: itemId } : null;
+}
+
+/** A project as the model named it: an id, its name, or a unique part of it. */
+function findProject(asked: string, tree: Tree) {
+  const byId = id(asked);
+  if (byId !== null) return tree.projects.find((p) => p.id === byId);
+  const lower = asked.toLowerCase();
+  const exact = tree.projects.find((p) => p.name.toLowerCase() === lower);
+  if (exact) return exact;
+  const partial = tree.projects.filter((p) => p.name.toLowerCase().includes(lower));
+  return partial.length === 1 ? partial[0] : undefined;
 }
