@@ -1,0 +1,171 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
+import type { Run } from "../app/actions";
+import { api, type AssistantEvent, type Conversation, type Message } from "../lib/api";
+import type { Session } from "./useSession";
+
+export type Assistant = ReturnType<typeof useAssistant>;
+
+/** Mirrors `commands::assistant::ASSISTANT_EVENT`. */
+const ASSISTANT_EVENT = "assistant-event";
+
+/** The open conversation. `id` null is a new chat that has no messages yet. */
+export type Thread = {
+  id: number | null;
+  messages: Message[];
+  /** Reply text streaming in, not stored yet. */
+  streaming: string;
+  /** Why the last reply failed. */
+  error: string | null;
+  /** Changes whenever another conversation is opened, not when a new chat gets its id. */
+  opened: number;
+};
+
+const NEW_THREAD: Thread = { id: null, messages: [], streaming: "", error: null, opened: 0 };
+
+const byActivity = (a: Conversation, b: Conversation) => b.updatedAt - a.updatedAt || b.id - a.id;
+
+/** The list with one conversation changed, most recently active first. */
+const updated = (
+  list: Conversation[] | null,
+  id: number,
+  change: (c: Conversation) => Conversation,
+) => list && list.map((c) => (c.id === id ? change(c) : c)).sort(byActivity);
+
+/**
+ * Conversations with the assistant. Lives in `App` so a reply keeps streaming while the user is
+ * elsewhere. History is decrypted, so it loads inside the unlock window and is dropped as soon
+ * as the window closes, like revealed secrets.
+ */
+export function useAssistant(session: Session, run: Run) {
+  /** `null` until loaded, and again once the unlock window closes. */
+  const [conversations, setConversations] = useState<Conversation[] | null>(null);
+  const [thread, setThread] = useState<Thread>(NEW_THREAD);
+  const threadId = useRef<number | null>(null);
+  threadId.current = thread.id;
+
+  const forget = useCallback(() => {
+    setConversations(null);
+    setThread(NEW_THREAD);
+  }, []);
+
+  useEffect(() => {
+    if (!session.unlocked) forget();
+  }, [session.unlocked, forget]);
+
+  // Streamed text arrives per token; it is applied once per frame so long replies stay smooth.
+  const pending = useRef<{ id: number; text: string } | null>(null);
+  const frame = useRef(0);
+  const flush = useCallback(() => {
+    frame.current = 0;
+    const chunk = pending.current;
+    pending.current = null;
+    if (!chunk) return;
+    setThread((t) => (t.id === chunk.id ? { ...t, streaming: t.streaming + chunk.text } : t));
+  }, []);
+
+  useEffect(() => {
+    const onEvent = (event: AssistantEvent) => {
+      const id = event.conversationId;
+      if (event.type === "text") {
+        if (id !== threadId.current) return;
+        pending.current = { id, text: (pending.current?.text ?? "") + event.delta };
+        if (!frame.current) frame.current = requestAnimationFrame(flush);
+        return;
+      }
+      // Anything else ends the streamed text: it was stored, or the reply ended.
+      cancelAnimationFrame(frame.current);
+      frame.current = 0;
+      pending.current = null;
+      if (event.type === "message") {
+        const { message } = event;
+        setConversations((list) =>
+          updated(list, id, (c) => ({ ...c, updatedAt: message.createdAt })),
+        );
+        setThread((t) =>
+          t.id === id ? { ...t, messages: [...t.messages, message], streaming: "" } : t,
+        );
+      } else {
+        setConversations((list) => updated(list, id, (c) => ({ ...c, replying: false })));
+        const error = event.type === "failed" ? event.message : null;
+        setThread((t) => (t.id === id ? { ...t, streaming: "", error } : t));
+      }
+    };
+    const unlisten = listen<AssistantEvent>(ASSISTANT_EVENT, (e) => onEvent(e.payload));
+    return () => {
+      cancelAnimationFrame(frame.current);
+      void unlisten.then((stop) => stop());
+    };
+  }, [flush]);
+
+  /** Loads the list, asking for Touch ID if the window is closed. */
+  const load = useCallback(
+    () =>
+      run(async () => {
+        const list = await session.withUnlock(api.listConversations);
+        setConversations(list.sort(byActivity));
+      }),
+    [run, session],
+  );
+
+  const open = useCallback(
+    (id: number | null) =>
+      run(async () => {
+        if (id === null) {
+          setThread({ ...NEW_THREAD, opened: Date.now() });
+          return;
+        }
+        const messages = await session.withUnlock(() => api.getConversation(id));
+        setThread({ id, messages, streaming: "", error: null, opened: Date.now() });
+      }),
+    [run, session],
+  );
+
+  const send = useCallback(
+    (text: string) =>
+      run(async () => {
+        const sent = await session.withUnlock(() => api.sendMessage(threadId.current, text));
+        const { conversation, message } = sent;
+        setConversations((list) =>
+          [conversation, ...(list ?? []).filter((c) => c.id !== conversation.id)].sort(byActivity),
+        );
+        setThread((t) =>
+          t.id === conversation.id
+            ? { ...t, messages: [...t.messages, message], error: null }
+            : { ...NEW_THREAD, id: conversation.id, messages: [message], opened: t.opened },
+        );
+      }),
+    [run, session],
+  );
+
+  const cancel = useCallback(() => {
+    const id = threadId.current;
+    if (id !== null) void run(() => api.cancelReply(id));
+  }, [run]);
+
+  const rename = useCallback(
+    (id: number, title: string) =>
+      run(async () => {
+        await session.withUnlock(() => api.renameConversation(id, title));
+        setConversations((list) => updated(list, id, (c) => ({ ...c, title: title.trim() })));
+      }),
+    [run, session],
+  );
+
+  const remove = useCallback(
+    (id: number) =>
+      run(async () => {
+        await session.withUnlock(() => api.deleteConversation(id));
+        setConversations((list) => list && list.filter((c) => c.id !== id));
+        setThread((t) => (t.id === id ? NEW_THREAD : t));
+      }),
+    [run, session],
+  );
+
+  const replying = conversations?.find((c) => c.id === thread.id)?.replying ?? false;
+
+  return useMemo(
+    () => ({ conversations, thread, replying, load, open, send, cancel, rename, remove }),
+    [conversations, thread, replying, load, open, send, cancel, rename, remove],
+  );
+}

@@ -89,3 +89,15 @@
 .inline > .path {
   flex: 1;
 }
+
+/* Text fields in a row's control slot (assistant server, model, key). */
+.wideField {
+  width: 260px;
+}
+
+/* Free text in the system font rather than the markup editor's monospace. */
+.prose {
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  line-height: 1.55;
+}

@@ -56,7 +56,7 @@
   color: var(--color-text-tertiary);
 }
 
-/* Todos and Payments: fixed places above the panes, styled like tree rows. */
+/* Todos, Payments and Assistant: fixed places above the panes, styled like tree rows. */
 .places {
   display: flex;
   flex-direction: column;

@@ -7,6 +7,7 @@ export type Selection =
   | { kind: "tag"; path: string }
   | { kind: "todos" }
   | { kind: "payments" }
+  | { kind: "assistant" }
   /** `id` null creates; `projectId` presets the project of a new one. */
   | { kind: "todoEditor"; id: number | null; projectId: number | null }
   | { kind: "paymentEditor"; id: number | null; projectId: number | null }

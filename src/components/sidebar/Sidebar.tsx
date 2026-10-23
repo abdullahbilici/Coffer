@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useRef } from "react";
-import { ChevronsDownUp, ListTodo, Plus, Search, Wallet, X, type LucideIcon } from "lucide-react";
+import {
+  ChevronsDownUp,
+  ListTodo,
+  Plus,
+  Search,
+  Sparkles,
+  Wallet,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import type { VaultActions } from "../../app/actions";
 import type { Session } from "../../hooks/useSession";
 import type { Tree } from "../../lib/api";
@@ -86,7 +95,7 @@ export function Sidebar(props: Props) {
         )}
       </div>
 
-      <nav className={styles.places} aria-label="Agenda">
+      <nav className={styles.places} aria-label="Places">
         <PlaceRow
           icon={ListTodo}
           label="Todos"
@@ -99,6 +108,12 @@ export function Sidebar(props: Props) {
           label="Payments"
           selected={selection?.kind === "payments"}
           onClick={actions.selectPayments}
+        />
+        <PlaceRow
+          icon={Sparkles}
+          label="Assistant"
+          selected={selection?.kind === "assistant"}
+          onClick={actions.selectAssistant}
         />
       </nav>
 

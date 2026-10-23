@@ -20,6 +20,7 @@ function placeExists(tree: Tree | null, { selection }: Place): boolean {
       return tree.items.some((i) => hasTag(i, selection.path));
     case "todos":
     case "payments":
+    case "assistant":
       return true;
     case "newItem":
     case "todoEditor":

@@ -48,4 +48,6 @@ export type VaultActions = {
   /** Rejects on failure (after a toast) so the editor keeps the draft. */
   savePayment: (input: SavePaymentInput) => Promise<void>;
   deletePayment: (id: number) => void;
+
+  selectAssistant: () => void;
 };
