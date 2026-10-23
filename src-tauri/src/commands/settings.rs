@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use tauri::State;
+use zeroize::Zeroizing;
 
 use crate::{
     clipboard,
@@ -36,13 +37,24 @@ pub fn set_clipboard_clear(state: State<AppState>, secs: Option<u64>) -> AppResu
     settings::set_clipboard_clear(&conn, secs)
 }
 
-/// Called right after the frontend copied a secret.
 #[tauri::command]
-pub fn clear_clipboard_later(state: State<AppState>) -> AppResult<()> {
+pub fn set_clipboard_concealed(state: State<AppState>, on: bool) -> AppResult<()> {
+    let conn = state.db();
+    state.session().require_unlocked()?;
+    settings::set_clipboard_concealed(&conn, on)
+}
+
+/// Copies a secret the frontend already shows; kept out of clipboard history and cleared
+/// later as the settings say.
+#[tauri::command]
+pub fn copy_secret(state: State<AppState>, text: Zeroizing<String>) -> AppResult<()> {
     state.session().require_entered()?;
-    if let Some(delay) = settings::load(&state.db())?.clipboard_clear() {
-        clipboard::clear_later(delay);
-    }
+    let settings = settings::load(&state.db())?;
+    clipboard::copy_secret(
+        &text,
+        settings.clipboard_concealed,
+        settings.clipboard_clear(),
+    );
     Ok(())
 }
 
