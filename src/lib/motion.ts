@@ -7,6 +7,7 @@ export function motion() {
   const ms = (name: string) => parseFloat(css.getPropertyValue(name)) || 0;
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   return {
+    fastMs: reduced ? 1 : ms("--duration-fast"),
     baseMs: reduced ? 1 : ms("--duration-base"),
     slowMs: reduced ? 1 : ms("--duration-slow"),
     glideMs: reduced ? 1 : ms("--duration-glide"),

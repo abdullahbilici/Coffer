@@ -1,0 +1,141 @@
+/* Quick capture: a floating panel in a transparent window, with room around it for its shadow. */
+
+:global(html),
+:global(body) {
+  background: transparent;
+}
+
+.stage {
+  height: 100%;
+  padding: var(--space-4) var(--space-6) var(--space-8);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  max-height: 560px;
+  overflow: hidden;
+  border-radius: var(--radius-xl);
+  background: var(--color-bg-elevated);
+  box-shadow: var(--shadow-popover);
+  opacity: 0;
+  transform: translateY(-4px) scale(0.985);
+  transition:
+    opacity var(--duration-fast) var(--ease-in),
+    transform var(--duration-fast) var(--ease-in);
+}
+
+.shown {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity var(--duration-base) var(--ease-out),
+    transform var(--duration-slow) var(--ease-out);
+}
+
+.bar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--space-3);
+  height: 56px;
+  padding: 0 var(--space-3) 0 var(--space-4);
+}
+
+.mark {
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+}
+
+.field {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-size: var(--text-lg);
+  user-select: text;
+}
+
+.field::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.status {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 30px;
+}
+
+.thinking {
+  composes: thinking from "../components/views/Assistant.module.css";
+  padding: 0 var(--space-2);
+}
+
+.copied {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 var(--space-2);
+  color: var(--color-text-tertiary);
+  font-size: var(--text-sm);
+  animation: fade var(--duration-base) var(--ease-out);
+}
+
+.copied svg {
+  color: var(--color-success);
+}
+
+.leaving {
+  opacity: 0;
+  transition: opacity var(--duration-base) var(--ease-in);
+}
+
+/* The reply under the field: an answer, a draft, or both. Each part scrolls on its own. */
+.result {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-top: 1px solid var(--color-border);
+  animation: open var(--duration-base) var(--ease-out);
+}
+
+.answer {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: scroll;
+  padding: var(--space-3) var(--space-4);
+  user-select: text;
+}
+
+.answer + .answer {
+  padding-top: 0;
+}
+
+.quiet {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  color: var(--color-text-tertiary);
+  font-size: var(--text-sm);
+}
+
+.error {
+  composes: error from "../components/views/Assistant.module.css";
+  padding: var(--space-3) var(--space-4);
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes open {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}

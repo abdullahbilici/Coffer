@@ -52,6 +52,8 @@ const SIGN_ICONS = { add: Plus, change: PenLine, remove: Minus };
 const FOLD_AFTER_LINES = 14;
 
 type Props = {
+  /** Quick capture's version: the panel is the card, and the diff scrolls above its footer. */
+  compact?: boolean;
   groups: DraftGroup[];
   status: DraftStatus;
   session: Session;
@@ -62,7 +64,16 @@ type Props = {
 };
 
 /** A drafted change set as a calm diff, grouped by project, with Apply and Discard. */
-export function DraftCard({ groups, status, session, run, onCopy, onApply, onDiscard }: Props) {
+export function DraftCard({
+  compact = false,
+  groups,
+  status,
+  session,
+  run,
+  onCopy,
+  onApply,
+  onDiscard,
+}: Props) {
   const [busy, setBusy] = useState(false);
   const secrets = useDraftSecrets(session, run, onCopy);
   const lines = groups.reduce((n, g) => n + g.entries.reduce((m, e) => m + e.lines.length, 0), 0);
@@ -79,7 +90,13 @@ export function DraftCard({ groups, status, session, run, onCopy, onApply, onDis
   };
 
   return (
-    <section className={cx(styles.card, status === "discarded" && styles.discarded)}>
+    <section
+      className={cx(
+        styles.card,
+        compact && styles.compact,
+        status === "discarded" && styles.discarded,
+      )}
+    >
       <div className={styles.body}>
         {groups.map((group, g) => (
           <div key={`${g}:${group.project}`} className={styles.group}>
