@@ -29,6 +29,20 @@
   overflow-y: scroll;
 }
 
+/* Lined up with the panel's 16 px edge instead of the card's 12. */
+.compact .groupHead,
+.compact .footer {
+  padding-left: var(--space-4);
+}
+
+.compact .entryHead {
+  padding-left: var(--space-6);
+}
+
+.compact .lines {
+  padding-left: 46px;
+}
+
 .discarded .body {
   opacity: 0.5;
 }
