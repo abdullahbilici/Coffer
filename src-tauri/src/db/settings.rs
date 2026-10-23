@@ -21,6 +21,7 @@ const ASSISTANT_MODEL: &str = "assistant_model";
 const ASSISTANT_CONTEXT: &str = "assistant_context";
 const ASSISTANT_KEY_SET: &str = "assistant_key_set";
 const MCP_ACCESS: &str = "mcp_access";
+const CAPTURE_SHORTCUT: &str = "capture_shortcut";
 
 /// Stored for an optional duration that is switched off ("until screen locks", "never").
 const OFF: &str = "off";
@@ -31,6 +32,8 @@ pub const CLIPBOARD_CLEAR_CHOICES: &[u64] = &[30, 60];
 const DEFAULT_CLIPBOARD_CLEAR: u64 = 30;
 pub const DEFAULT_ASSISTANT_URL: &str = "http://localhost:11434";
 pub const DEFAULT_ASSISTANT_MODEL: &str = "qwen3.8:27b";
+/// Option+Shift+Space: free in macOS and the common apps, unlike Option+Space (a no-break space).
+pub const DEFAULT_CAPTURE_SHORTCUT: &str = "Alt+Shift+Space";
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -43,6 +46,9 @@ pub struct Settings {
     pub assistant: AssistantSettings,
     /// `coffer --mcp` may answer an MCP client. Off by default.
     pub mcp_access: bool,
+    /// The global shortcut that opens quick capture, as the global-shortcut plugin parses it.
+    /// `None`: switched off.
+    pub capture_shortcut: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -155,6 +161,7 @@ pub fn load(conn: &Connection) -> AppResult<Settings> {
             has_api_key: get_flag(conn, ASSISTANT_KEY_SET, false)?,
         },
         mcp_access: mcp_access(conn)?,
+        capture_shortcut: capture_shortcut(conn)?,
     })
 }
 
@@ -208,6 +215,18 @@ pub fn set_mcp_access(conn: &Connection, on: bool) -> AppResult<()> {
     set_flag(conn, MCP_ACCESS, on)
 }
 
+pub fn capture_shortcut(conn: &Connection) -> AppResult<Option<String>> {
+    Ok(match get(conn, CAPTURE_SHORTCUT)? {
+        None => Some(DEFAULT_CAPTURE_SHORTCUT.to_string()),
+        Some(value) if value == OFF => None,
+        Some(value) => Some(value),
+    })
+}
+
+pub fn set_capture_shortcut(conn: &Connection, shortcut: Option<&str>) -> AppResult<()> {
+    set(conn, CAPTURE_SHORTCUT, shortcut.unwrap_or(OFF))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -226,6 +245,22 @@ mod tests {
         assert_eq!(settings.assistant.model, DEFAULT_ASSISTANT_MODEL);
         assert!(settings.assistant.context.is_empty() && !settings.assistant.has_api_key);
         assert!(!settings.mcp_access);
+        assert_eq!(
+            settings.capture_shortcut.as_deref(),
+            Some(DEFAULT_CAPTURE_SHORTCUT)
+        );
+    }
+
+    #[test]
+    fn capture_shortcut_can_be_changed_or_switched_off() {
+        let conn = open_in_memory();
+        set_capture_shortcut(&conn, Some("Control+Alt+KeyN")).unwrap();
+        assert_eq!(
+            capture_shortcut(&conn).unwrap().as_deref(),
+            Some("Control+Alt+KeyN")
+        );
+        set_capture_shortcut(&conn, None).unwrap();
+        assert_eq!(capture_shortcut(&conn).unwrap(), None);
     }
 
     #[test]
