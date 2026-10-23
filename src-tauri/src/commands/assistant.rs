@@ -48,6 +48,9 @@ const API_KEY_LABEL: &str = "assistant API key";
 
 /// Mirrored by `useAssistant`.
 const ASSISTANT_EVENT: &str = "assistant-event";
+/// Emitted once a draft is applied, so a window that didn't apply it reloads the tree.
+/// Mirrored by `useVault`.
+const VAULT_CHANGED: &str = "vault-changed";
 
 const MAX_CONTEXT_LEN: usize = 20_000;
 /// Longest text an import takes at once.
@@ -439,6 +442,7 @@ fn with_status(mut message: Message, new: DraftStatus) -> Message {
 /// user's messages and the vault here, never from the model.
 #[tauri::command]
 pub fn apply_draft(
+    app: AppHandle,
     state: State<AppState>,
     conversation_id: i64,
     message_id: i64,
@@ -464,6 +468,7 @@ pub fn apply_draft(
     let message = with_status(message, DraftStatus::Applied);
     conversations::update_message(&change, message.id, &seal_turn(&key, &message.turn)?)?;
     change.commit()?;
+    let _ = app.emit(VAULT_CHANGED, ());
     Ok(message)
 }
 

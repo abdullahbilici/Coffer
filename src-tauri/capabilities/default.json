@@ -8,7 +8,7 @@
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
-    "core:window:allow-set-theme",
+    "core:app:allow-set-app-theme",
     "dialog:allow-open",
     "opener:default"
   ]

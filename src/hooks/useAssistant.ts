@@ -43,6 +43,8 @@ export function useAssistant(session: Session, run: Run, reload: () => Promise<v
   const [thread, setThread] = useState<Thread>(NEW_THREAD);
   const threadId = useRef<number | null>(null);
   threadId.current = thread.id;
+  const listed = useRef(conversations);
+  listed.current = conversations;
 
   const forget = useCallback(() => {
     setConversations(null);
@@ -86,6 +88,13 @@ export function useAssistant(session: Session, run: Run, reload: () => Promise<v
           t.id === id ? { ...t, messages: [...t.messages, message], streaming: "" } : t,
         );
       } else {
+        // Quick capture starts conversations of its own; a loaded list picks them up.
+        if (listed.current && !listed.current.some((c) => c.id === id)) {
+          api.listConversations().then(
+            (list) => setConversations(list.sort(byActivity)),
+            () => {},
+          );
+        }
         setConversations((list) => updated(list, id, (c) => ({ ...c, replying: false })));
         const error = event.type === "failed" ? event.message : null;
         setThread((t) => (t.id === id ? { ...t, streaming: "", error } : t));
@@ -112,6 +121,8 @@ export function useAssistant(session: Session, run: Run, reload: () => Promise<v
     (id: number | null) =>
       run(async () => {
         if (id === null) {
+          // At once, so a `send` right after this starts a new conversation.
+          threadId.current = null;
           setThread({ ...NEW_THREAD, opened: Date.now() });
           return;
         }
