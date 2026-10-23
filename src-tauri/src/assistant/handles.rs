@@ -6,7 +6,13 @@
 
 use std::fmt;
 
+use rusqlite::Connection;
+use zeroize::Zeroizing;
+
 use crate::{
+    commands::sealing::{open_spans, open_with},
+    crypto::VaultKey,
+    db::{items, projects, todos},
     error::{AppError, AppResult},
     secrets,
 };
@@ -73,6 +79,29 @@ impl Handle {
         }
         Ok(Self { source, id, index })
     }
+}
+
+/// The value behind a handle. Only the user sees it, or a draft they apply copies it.
+pub fn reveal(conn: &Connection, key: &VaultKey, handle: Handle) -> AppResult<Zeroizing<String>> {
+    let sealed = match handle.source {
+        Source::Note => {
+            let encrypted = items::encrypted(conn, handle.id)?;
+            if encrypted.template.is_none() {
+                return match handle.index {
+                    None => open_with(key, None, &encrypted.sealed),
+                    Some(_) => Err(AppError::NotFound),
+                };
+            }
+            encrypted.sealed
+        }
+        Source::Overview => projects::readme_secrets(conn, handle.id)?.1,
+        Source::Todo => todos::description_secrets(conn, handle.id)?.1,
+    };
+    let index = handle.index.ok_or(AppError::NotFound)?;
+    open_spans(key, &sealed)?
+        .get(index)
+        .map(|value| Zeroizing::new(value.clone()))
+        .ok_or(AppError::NotFound)
 }
 
 /// A readable template with every `` `!n!` `` marker replaced by its handle.

@@ -2,8 +2,12 @@
 //! value: tools replace secrets with handles (`handles`), which only the user can reveal.
 
 pub mod agent;
+pub mod draft;
+pub mod fields;
 pub mod handles;
+pub mod inputs;
 pub mod ollama;
+pub mod reply;
 pub mod spend;
 pub mod tools;
 
@@ -20,6 +24,9 @@ use serde_json::Value;
 pub enum Turn {
     User {
         text: String,
+        /// Text pasted for import (a dump of notes and credentials), sent with the message.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        paste: Option<String>,
     },
     Assistant {
         text: String,
@@ -34,6 +41,31 @@ pub enum Turn {
         name: String,
         result: String,
     },
+    /// The changes a reply drafted, for the user to apply or discard.
+    Draft {
+        ops: Vec<draft::Op>,
+        groups: Vec<draft::Group>,
+        #[serde(default)]
+        status: DraftStatus,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DraftStatus {
+    #[default]
+    Pending,
+    Applied,
+    Discarded,
+}
+
+impl Turn {
+    pub fn user(text: impl Into<String>) -> Self {
+        Self::User {
+            text: text.into(),
+            paste: None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -67,17 +99,18 @@ pub const NUM_CTX: u32 = 16_384;
 /// Room for earlier turns, in characters (roughly a third of `NUM_CTX` tokens each way).
 const HISTORY_BUDGET: usize = 36_000;
 
-/// The system prompt: role, data model, how secrets look, today, and the user's own notes.
+/// The system prompt: role, data model, how secrets and values look, today, and the user's
+/// own notes.
 pub fn system_prompt(today: &str, context: &str) -> String {
     let mut prompt = format!(
         "You are the assistant inside Coffer, a private vault on the user's Mac for project \
-credentials, notes, todos and payments. You can only read Coffer through your tools. You cannot \
-change anything, browse the web or run commands.
+credentials, notes, todos and payments. You work only inside Coffer through your tools: you \
+cannot browse the web or run commands.
 
 Coffer's data:
 - Projects hold nested folders and notes. Each project has a markdown overview.
-- A note has a title, tags such as env/prod, and a markdown body. `value` in a body is a value the \
-user can copy.
+- A note has a title, tags such as env/prod, and a markdown body. Its fields are lines like \
+\"Password: value\".
 - Todos belong to a project or are general, with an optional due date. Payments are monthly, \
 yearly or once, in their own currency, with price history. Amounts in different currencies are \
 never converted or added together.
@@ -86,6 +119,23 @@ Secrets never reach you. Tools show each one as a handle: [n12.0] is secret 0 of
 is in a project overview, [t4.0] in a todo, and [n12] is a note whose whole body is secret. The \
 app shows a handle to the user as a hidden value they can reveal and copy. Put the exact handle \
 where the value belongs, never guess a value, and never claim to know one.
+
+Values the user types reach you as handles too: [u3: sk_live_…, 32 chars] is a value from their \
+message; only its kind and length are shown.
+
+Changing Coffer:
+- Write tools (create_note, add_field, update_field, move_note, complete_todo, create_payment …) \
+only draft changes. The user reviews the draft and applies or discards it, so say what you \
+drafted, never that it is done.
+- A field value is always a handle: [u3] for a value from the user's message, [n12.0] to copy a \
+stored secret. Never type a value yourself; a value the user wrote plainly as a short word may be \
+passed as written.
+- Look up ids first (search, get_project, get_note, list_todos, list_payments) and change what \
+exists: add a field to the right note rather than making a new one, and update a field that \
+already has a value. Use the field's label as it is in the note.
+- Mark a field secret for passwords, keys, tokens, PINs and recovery codes; usernames, emails, \
+hosts, public URLs and ids are not secret.
+- If a tool answers with an error, fix the call and try again.
 
 How to answer:
 - Look things up before answering. Use search to find notes by name, then get_note or \
@@ -96,6 +146,38 @@ yourself.
 
 Today is {today}."
     );
+    let context = context.trim();
+    if !context.is_empty() {
+        prompt.push_str("\n\nWhat the user wants you to know:\n");
+        prompt.push_str(context);
+    }
+    prompt
+}
+
+/// The system prompt for importing pasted text into a draft, one chunk of lines at a time.
+pub fn import_prompt(context: &str) -> String {
+    let mut prompt = "You file pasted text into Coffer, a private vault: projects hold \
+folders and notes, and a note's fields are lines like \"Password: value\". The text is a messy \
+dump of credentials and notes. Every value in it is shown as a handle such as \
+[u3: sk_live_…, 32 chars]; you never see values, only their kind and length.
+
+Call add_notes once with every note from the lines you are given, then stop. Rules:
+- One note per account, service or environment (prod and staging are separate notes). Its \
+fields are the values of that account, each with a short label (Password, API key, Host, User) \
+and the handle as the value, e.g. \"[u3]\".
+- Use the project the text puts a value under. The same project appears under different \
+spellings and with suffixes (\"Name\", \"name projesi\", \"NAME işleri\"): use one clean \
+name, and when the vault has the project already, its exact name. Accounts with no project \
+around them that look private go to project \"Personal\".
+- Folders only for projects with many notes (Infra, Payments, Email, Marketing, Mobile), or the \
+folders a vault project already has; otherwise leave folder empty.
+- Secret: passwords, API keys, tokens, secret keys, PINs, codes, webhook URLs with keys. Not \
+secret: usernames, emails, URLs, hosts, IPs, regions, public ids.
+- When a note the vault has already gets a new value, call add_field on it; when the text says \
+a stored value changed, call update_field with the field's label as it is in the note. Values \
+the vault has already are skipped for you.
+- Lines without values (todos, comments) are not imported."
+        .to_string();
     let context = context.trim();
     if !context.is_empty() {
         prompt.push_str("\n\nWhat the user wants you to know:\n");
@@ -115,16 +197,26 @@ pub fn model_turns(history: &[Turn]) -> Vec<Turn> {
     let mut earlier: Vec<Turn> = history[..current]
         .iter()
         .filter_map(|turn| match turn {
-            Turn::User { .. } => Some(turn.clone()),
-            Turn::Assistant { text, .. } if !text.is_empty() => Some(Turn::Assistant {
-                text: text.clone(),
-                tool_calls: Vec::new(),
-                stopped: false,
-            }),
+            Turn::User { text, paste } => Some(Turn::user(match paste {
+                Some(paste) => format!(
+                    "{text}\n(Pasted {} lines to import.)",
+                    paste.lines().count()
+                ),
+                None => text.clone(),
+            })),
+            Turn::Assistant { text, .. } if !text.is_empty() => Some(said(text.clone())),
+            Turn::Draft { .. } => Some(said(draft_note(turn))),
             _ => None,
         })
         .collect();
-    let recent = &history[current..];
+    let recent: Vec<Turn> = history[current..]
+        .iter()
+        .map(|turn| match turn {
+            Turn::Draft { .. } => said(draft_note(turn)),
+            _ => turn.clone(),
+        })
+        .collect();
+    let recent = &recent[..];
     let size = |turns: &[Turn]| turns.iter().map(turn_len).sum::<usize>();
     let mut total = size(&earlier) + size(recent);
     while total > HISTORY_BUDGET && !earlier.is_empty() {
@@ -140,9 +232,31 @@ pub fn model_turns(history: &[Turn]) -> Vec<Turn> {
     earlier
 }
 
+fn said(text: String) -> Turn {
+    Turn::Assistant {
+        text,
+        tool_calls: Vec::new(),
+        stopped: false,
+    }
+}
+
+/// What the model remembers of a draft: what it changed and what the user did with it.
+fn draft_note(turn: &Turn) -> String {
+    let Turn::Draft { groups, status, .. } = turn else {
+        return String::new();
+    };
+    let outcome = match status {
+        DraftStatus::Pending => "not applied yet",
+        DraftStatus::Applied => "the user applied it",
+        DraftStatus::Discarded => "the user discarded it",
+    };
+    format!("(Draft: {}. {outcome}.)", draft::summary(groups))
+}
+
 fn turn_len(turn: &Turn) -> usize {
     match turn {
-        Turn::User { text } => text.len(),
+        Turn::User { text, paste } => text.len() + paste.as_ref().map_or(0, String::len),
+        Turn::Draft { .. } => draft_note(turn).len(),
         Turn::Assistant {
             text, tool_calls, ..
         } => {
@@ -190,7 +304,7 @@ mod tests {
     use super::*;
 
     fn user(text: &str) -> Turn {
-        Turn::User { text: text.into() }
+        Turn::user(text)
     }
 
     fn assistant(text: &str, calls: usize) -> Turn {

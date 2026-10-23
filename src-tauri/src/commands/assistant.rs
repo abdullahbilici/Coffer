@@ -19,21 +19,21 @@ use zeroize::Zeroizing;
 
 use super::{
     required_name,
-    sealing::{open_spans, open_with, seal_with},
+    sealing::{open_with, seal_with},
 };
 use crate::{
     assistant::{
-        Turn,
-        agent::{self, Hooks},
-        handles::{Handle, Source},
+        DraftStatus, Turn, draft,
+        handles::{self, Handle},
+        import_prompt,
         ollama::{self, Ollama},
-        system_prompt, title_from, tools,
+        reply::{self, Io, Prompts},
+        system_prompt, title_from,
     },
     crypto::{self, VaultKey},
     db::{
-        SecureBody, conversations, items, projects,
+        Change, SecureBody, conversations,
         settings::{self, Settings},
-        todos,
     },
     error::{AppError, AppResult},
     state::AppState,
@@ -50,6 +50,8 @@ const API_KEY_LABEL: &str = "assistant API key";
 const ASSISTANT_EVENT: &str = "assistant-event";
 
 const MAX_CONTEXT_LEN: usize = 20_000;
+/// Longest text an import takes at once.
+const MAX_PASTE_LEN: usize = 200_000;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -243,17 +245,22 @@ pub fn delete_conversation(state: State<AppState>, id: i64) -> AppResult<()> {
 }
 
 /// Stores the user's message (in a new conversation without an id) and starts the reply in the
-/// background. Returns at once; the reply arrives as events.
+/// background. Returns at once; the reply arrives as events. A message with `paste` imports it.
 #[tauri::command]
 pub fn send_message(
     app: AppHandle,
     state: State<AppState>,
     conversation_id: Option<i64>,
     text: String,
+    paste: Option<String>,
 ) -> AppResult<Sent> {
     let text = text.trim().to_string();
-    if text.is_empty() {
+    let paste = paste.filter(|p| !p.trim().is_empty());
+    if text.is_empty() && paste.is_none() {
         return Err(AppError::Invalid("Message is empty".to_string()));
+    }
+    if paste.as_ref().is_some_and(|p| p.len() > MAX_PASTE_LEN) {
+        return Err(AppError::Invalid("That text is too long".to_string()));
     }
     let (conversation, message) = {
         let conn = state.db();
@@ -272,12 +279,15 @@ pub fn send_message(
                 )
             }
             None => {
-                let title = title_from(&text);
+                let title = match &paste {
+                    Some(paste) if text.is_empty() => format!("Import: {}", title_from(paste)),
+                    _ => title_from(&text),
+                };
                 let id = conversations::insert(&conn, &seal_with(&key, &title)?, now)?;
                 (id, title, now)
             }
         };
-        let turn = Turn::User { text };
+        let turn = Turn::User { text, paste };
         if state.replies().contains_key(&id) {
             return Err(AppError::Invalid(
                 "Still answering the last message".to_string(),
@@ -323,11 +333,11 @@ pub fn send_message(
     })
 }
 
-/// Runs the tool loop for the conversation's last message, storing each turn as it completes.
+/// Runs the reply for the conversation's last message, storing each turn as it completes.
 fn reply(app: &AppHandle, id: i64, cancel: &Arc<AtomicBool>) -> AppResult<()> {
     let state = app.state::<AppState>();
     let assistant = settings::load(&state.db())?.assistant;
-    let mut history: Vec<Turn> = load_messages(&state, id)?
+    let history: Vec<Turn> = load_messages(&state, id)?
         .into_iter()
         .map(|m| m.turn)
         .collect();
@@ -342,19 +352,25 @@ fn reply(app: &AppHandle, id: i64, cancel: &Arc<AtomicBool>) -> AppResult<()> {
         api_key,
         Arc::clone(cancel),
     )?;
-    let system = system_prompt(&local_today("EEEE, d MMMM yyyy"), &assistant.context);
+    let chat = system_prompt(&local_today("EEEE, d MMMM yyyy"), &assistant.context);
+    let import = import_prompt(&assistant.context);
     let today = local_today("yyyy-MM-dd");
-    let specs = tools::specs();
     let emit = |event: AssistantEvent| {
         let _ = app.emit(ASSISTANT_EVENT, event);
     };
+    let db = || state.db();
 
-    agent::respond(
+    reply::reply(
         &model,
-        &system,
-        &specs,
-        &mut history,
-        Hooks {
+        &Prompts {
+            chat: &chat,
+            import: &import,
+        },
+        &history,
+        Io {
+            db: &db,
+            key: history_key(&state).ok(),
+            today: &today,
             on_text: &mut |text| {
                 emit(AssistantEvent::Text {
                     conversation_id: id,
@@ -376,14 +392,91 @@ fn reply(app: &AppHandle, id: i64, cancel: &Arc<AtomicBool>) -> AppResult<()> {
                 });
                 Ok(())
             },
-            run_tool: &mut |call| {
-                let conn = state.db();
-                state.session().require_entered()?;
-                Ok(tools::run(&conn, &today, &call.name, &call.arguments))
-            },
             cancelled: &|| cancel.load(Ordering::Relaxed),
+            check: &|| state.session().require_entered(),
         },
     )
+}
+
+/// A draft message of a conversation, with the history before it.
+fn find_draft(
+    state: &AppState,
+    conversation_id: i64,
+    message_id: i64,
+) -> AppResult<(Message, Vec<Turn>)> {
+    let messages = load_messages(state, conversation_id)?;
+    let index = messages
+        .iter()
+        .position(|m| m.id == message_id)
+        .ok_or(AppError::NotFound)?;
+    let message = messages[index].clone();
+    match &message.turn {
+        Turn::Draft {
+            status: DraftStatus::Pending,
+            ..
+        } => {}
+        Turn::Draft { .. } => {
+            return Err(AppError::Invalid(
+                "This draft was applied or discarded already".to_string(),
+            ));
+        }
+        _ => return Err(AppError::NotFound),
+    }
+    let history = messages[..index].iter().map(|m| m.turn.clone()).collect();
+    Ok((message, history))
+}
+
+fn with_status(mut message: Message, new: DraftStatus) -> Message {
+    if let Turn::Draft { status, .. } = &mut message.turn {
+        *status = new;
+    }
+    message
+}
+
+/// Applies a draft in one transaction and marks it applied in history. Values come from the
+/// user's messages and the vault here, never from the model.
+#[tauri::command]
+pub fn apply_draft(
+    state: State<AppState>,
+    conversation_id: i64,
+    message_id: i64,
+) -> AppResult<Message> {
+    if state.replies().contains_key(&conversation_id) {
+        return Err(AppError::Invalid(
+            "Still answering the last message".to_string(),
+        ));
+    }
+    let (message, history) = find_draft(&state, conversation_id, message_id)?;
+    let Turn::Draft { ops, .. } = &message.turn else {
+        unreachable!("find_draft returns drafts");
+    };
+    let (inputs, _) = reply::take_inputs(&history);
+    let conn = state.db();
+    let key = {
+        let mut session = state.session();
+        session.require_unlocked()?;
+        session.active_key()?
+    };
+    let change = Change::begin(&conn)?;
+    draft::apply(&change, &key, &inputs, ops, now_millis())?;
+    let message = with_status(message, DraftStatus::Applied);
+    conversations::update_message(&change, message.id, &seal_turn(&key, &message.turn)?)?;
+    change.commit()?;
+    Ok(message)
+}
+
+#[tauri::command]
+pub fn discard_draft(
+    state: State<AppState>,
+    conversation_id: i64,
+    message_id: i64,
+) -> AppResult<Message> {
+    let (message, _) = find_draft(&state, conversation_id, message_id)?;
+    let message = with_status(message, DraftStatus::Discarded);
+    let conn = state.db();
+    let key = history_key(&state)?;
+    conversations::update_message(&conn, message.id, &seal_turn(&key, &message.turn)?)?;
+    Ok(message)
 }
 
 #[tauri::command]
@@ -399,23 +492,5 @@ pub fn reveal_handle(state: State<AppState>, handle: String) -> AppResult<String
     let handle = Handle::parse(&handle)?;
     let conn = state.db();
     let key = state.session().active_key()?;
-    let sealed = match handle.source {
-        Source::Note => {
-            let encrypted = items::encrypted(&conn, handle.id)?;
-            if encrypted.template.is_none() {
-                return match handle.index {
-                    None => Ok(open_with(&key, None, &encrypted.sealed)?.to_string()),
-                    Some(_) => Err(AppError::NotFound),
-                };
-            }
-            encrypted.sealed
-        }
-        Source::Overview => projects::readme_secrets(&conn, handle.id)?.1,
-        Source::Todo => todos::description_secrets(&conn, handle.id)?.1,
-    };
-    let index = handle.index.ok_or(AppError::NotFound)?;
-    open_spans(&key, &sealed)?
-        .get(index)
-        .cloned()
-        .ok_or(AppError::NotFound)
+    Ok(handles::reveal(&conn, &key, handle)?.to_string())
 }

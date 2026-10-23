@@ -211,6 +211,15 @@ pub fn move_to(
     expect_changed(changed)
 }
 
+/// Renames an item without touching its body.
+pub fn rename(conn: &Connection, id: i64, title: &str, now: i64) -> AppResult<()> {
+    let changed = conn.execute(
+        "UPDATE items SET title = ?2, updated_at = ?3 WHERE id = ?1",
+        params![id, title, now],
+    )?;
+    expect_changed(changed)
+}
+
 pub fn delete(conn: &Connection, id: i64) -> AppResult<()> {
     expect_changed(conn.execute("DELETE FROM items WHERE id = ?1", [id])?)
 }

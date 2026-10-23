@@ -66,6 +66,8 @@ pub fn run() {
             assistant_cmd::send_message,
             assistant_cmd::cancel_reply,
             assistant_cmd::reveal_handle,
+            assistant_cmd::apply_draft,
+            assistant_cmd::discard_draft,
             backup_cmd::vault_is_empty,
             backup_cmd::default_backup_dir,
             backup_cmd::suggest_passphrase,

@@ -665,7 +665,7 @@ fn snippet(body: &str, words: &[&str]) -> Option<String> {
 }
 
 /// Cuts `text` to `max` bytes at a char boundary, marking the cut.
-fn clip(text: &str, max: usize) -> String {
+pub(super) fn clip(text: &str, max: usize) -> String {
     if text.len() <= max {
         return text.to_string();
     }
@@ -676,14 +676,14 @@ fn clip(text: &str, max: usize) -> String {
     format!("{}… (cut)", &text[..end])
 }
 
-fn str_arg<'a>(args: &'a Value, name: &str) -> AppResult<&'a str> {
+pub(super) fn str_arg<'a>(args: &'a Value, name: &str) -> AppResult<&'a str> {
     args.get(name)
         .and_then(Value::as_str)
         .ok_or_else(|| AppError::Invalid(format!("{name} is required")))
 }
 
 /// Accepts a number or a numeric string, since small models send either.
-fn int_arg(args: &Value, name: &str) -> AppResult<i64> {
+pub(super) fn int_arg(args: &Value, name: &str) -> AppResult<i64> {
     let value = args.get(name);
     value
         .and_then(Value::as_i64)

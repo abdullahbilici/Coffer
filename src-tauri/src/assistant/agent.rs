@@ -151,9 +151,7 @@ mod tests {
     }
 
     fn run(model: &Script, cancel_after_tools: Option<usize>) -> (Vec<Turn>, Vec<Turn>, String) {
-        let mut history = vec![Turn::User {
-            text: "where is aws?".into(),
-        }];
+        let mut history = vec![Turn::user("where is aws?")];
         let mut saved = Vec::new();
         let mut streamed = String::new();
         let tools_run = Cell::new(0);

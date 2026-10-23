@@ -138,7 +138,9 @@ impl Ollama {
 
 fn message(turn: &Turn) -> Value {
     match turn {
-        Turn::User { text } => json!({ "role": "user", "content": text }),
+        Turn::User { text, .. } => json!({ "role": "user", "content": text }),
+        // `model_turns` turns drafts into text before a request is built.
+        Turn::Draft { .. } => json!({ "role": "assistant", "content": "" }),
         Turn::Assistant {
             text, tool_calls, ..
         } => {
@@ -282,7 +284,7 @@ mod tests {
         let cancel = Arc::new(AtomicBool::new(false));
         let ollama = Ollama::new("http://localhost:11434", "qwen3.8:27b", None, cancel).unwrap();
         let turns = [
-            Turn::User { text: "hi".into() },
+            Turn::user("hi"),
             Turn::Assistant {
                 text: String::new(),
                 tool_calls: vec![ToolCall {
