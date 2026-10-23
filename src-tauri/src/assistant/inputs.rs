@@ -10,14 +10,27 @@
 
 use std::fmt::Write as _;
 
+use zeroize::Zeroizing;
+
 /// The values of a conversation's user messages, `u1` first.
 #[derive(Debug, Default)]
 pub struct Inputs {
     values: Vec<String>,
     /// What the model saw of each message, for checking short values it repeats verbatim.
     shown: Vec<String>,
-    /// Writes values as a short masked form instead of handles (`masked`).
-    masking: bool,
+    /// How a value is written in place of itself.
+    form: Form,
+}
+
+#[derive(Debug, Default)]
+enum Form {
+    /// `[u3: sk_live_…, 32 chars]`.
+    #[default]
+    Input,
+    /// A short masked form, for titles (`masked`).
+    Masked,
+    /// `[n12.3: value]`: value 3 of secure note 12, shown with its handle (`note_values`).
+    Note(i64),
 }
 
 /// Values the model sees as they are; anything shorter is rarely worth hiding.
@@ -114,7 +127,7 @@ impl Inputs {
     }
 
     fn push(&mut self, value: &str, out: &mut String) {
-        if self.masking {
+        if let Form::Masked = self.form {
             out.push_str(&short(value));
             return;
         }
@@ -125,7 +138,10 @@ impl Inputs {
                 self.values.len()
             }
         };
-        let _ = write!(out, "[u{n}: {}]", hint(value));
+        let _ = match self.form {
+            Form::Note(id) => write!(out, "[n{id}.{}: {value}]", n - 1),
+            _ => write!(out, "[u{n}: {}]", hint(value)),
+        };
     }
 
     /// The value behind `u3` (or `[u3]`, `u3: …`).
@@ -153,10 +169,23 @@ impl Inputs {
 /// `text` with its values masked, e.g. for a conversation title: "add sk_test_… to acme".
 pub fn masked(text: &str) -> String {
     let mut inputs = Inputs {
-        masking: true,
+        form: Form::Masked,
         ..Inputs::default()
     };
     inputs.take(text)
+}
+
+/// A secure note's body with every value-like token found the same way as in user messages, each
+/// shown with its handle (`[n12.3: value]`), and the values in handle order. A secure note has
+/// no inline secrets, so `[n12.3]` always means the body's value 3.
+pub fn note_values(id: i64, body: &str) -> (Zeroizing<String>, Zeroizing<Vec<String>>) {
+    let mut inputs = Inputs {
+        form: Form::Note(id),
+        ..Inputs::default()
+    };
+    let shown = Zeroizing::new(inputs.take(body));
+    inputs.shown.clear();
+    (shown, Zeroizing::new(std::mem::take(&mut inputs.values)))
 }
 
 /// A value's masked form: a known key prefix, a URL's host or an email's domain, then "…".
@@ -410,6 +439,19 @@ mod tests {
             masked("add sk_test_51HxYz9KqLmN0pQrStUv and pass `hunter2` from https://x.example/a"),
             "add sk_test_… and pass … from x.example"
         );
+    }
+
+    #[test]
+    fn shows_secure_note_values_with_their_handles() {
+        let (shown, values) = note_values(
+            7,
+            "JWT_SECRET=demo-7f3a9c1e5b2d8f4a\nRegion: `eu-central-1`\nRuns nightly at 03:00.\nagain `eu-central-1`",
+        );
+        assert_eq!(
+            *shown,
+            "JWT_SECRET=[n7.0: demo-7f3a9c1e5b2d8f4a]\nRegion: [n7.1: eu-central-1]\nRuns nightly at 03:00.\nagain [n7.1: eu-central-1]"
+        );
+        assert_eq!(*values, ["demo-7f3a9c1e5b2d8f4a", "eu-central-1"]);
     }
 
     #[test]

@@ -880,6 +880,7 @@ fn run(model: &Traced, db: &Mutex<Connection>, history: Vec<Turn>, apply: bool) 
         Io {
             db: &lock,
             key: Some(key()),
+            unlocked: &|| true,
             today: TODAY,
             on_text: &mut on_text,
             save: &mut save,

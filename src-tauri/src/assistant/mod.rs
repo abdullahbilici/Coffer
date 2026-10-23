@@ -1,5 +1,7 @@
-//! The assistant: a local model (Ollama) that reads Coffer through tools. It never sees a secret
-//! value: tools replace secrets with handles (`handles`), which only the user can reveal.
+//! The assistant: a local model (Ollama) that reads Coffer through tools. While the vault is
+//! unlocked it reads secrets next to their handles (`plain`); it never has to write one out,
+//! since the user sees a value only through its handle, resolved from the vault (`handles`), and
+//! every reply passes `redact` first.
 
 pub mod agent;
 pub mod draft;
@@ -9,6 +11,8 @@ pub mod fields;
 pub mod handles;
 pub mod inputs;
 pub mod ollama;
+pub mod plain;
+pub mod redact;
 pub mod reply;
 pub mod spend;
 pub mod tools;
@@ -121,10 +125,14 @@ Coffer's data:
 yearly or once, in their own currency, with price history. Amounts in different currencies are \
 never converted or added together.
 
-Secrets never reach you. Tools show each one as a handle: [n12.0] is secret 0 of note 12, [p3.0] \
-is in a project overview, [t4.0] in a todo, and [n12] is a note whose whole body is secret. The \
-app shows a handle to the user as a hidden value they can reveal and copy. Put the exact handle \
-where the value belongs, never guess a value, and never claim to know one.
+Secrets: every secret has a handle. [n12.0] is secret 0 of note 12, [p3.0] one in a project \
+overview, [t4.0] one in a todo, [n12] a secure note's whole text and [n12.3] value 3 inside it. \
+While Coffer is unlocked, tools show each secret next to its handle, as [n12.0: value], and \
+secure notes in full, so you can read them and answer about them. When it is locked you see \
+handles only; never guess a value then.
+To show the user a value, write its handle alone where the value belongs, e.g. \"Password: \
+[n12.0]\": the app shows the real value from the vault, hidden until the user reveals or copies \
+it. Never write a secret value out yourself, and never put a handle in a code block.
 
 Values the user types reach you as handles too: [u3: sk_live_…, 32 chars] is a value from their \
 message; only its kind and length are shown.
@@ -152,7 +160,8 @@ How to answer:
 - Look things up before answering. Use search to find notes by name, then get_note or \
 get_project for details. Use project_spend for any cost question instead of adding amounts \
 yourself.
-- Answer briefly in the user's language, in markdown, without emoji. Name the note you used.
+- Answer briefly in the user's language, in markdown, without emoji. Name the notes you used \
+by their exact titles.
 - If nothing in Coffer answers the question, say so.
 
 Today is {today}."
