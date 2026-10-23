@@ -25,7 +25,7 @@ const CHUNK_CHARS: usize = 1_800;
 
 pub struct Io<'a> {
     pub db: &'a dyn Fn() -> MutexGuard<'a, Connection>,
-    /// Lets a draft skip secrets the vault holds already; `None` checks readable values only.
+    /// Lets a draft skip secrets a note holds already; `None` checks readable values only.
     pub key: Option<VaultKey>,
     /// `YYYY-MM-DD`.
     pub today: &'a str,
