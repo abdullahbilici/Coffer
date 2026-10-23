@@ -6,6 +6,7 @@ use crate::{
     clipboard,
     db::settings::{self, Settings},
     error::AppResult,
+    mcp,
     session::{self, SessionInfo},
     state::AppState,
 };
@@ -43,4 +44,18 @@ pub fn clear_clipboard_later(state: State<AppState>) -> AppResult<()> {
         clipboard::clear_later(delay);
     }
     Ok(())
+}
+
+#[tauri::command]
+pub fn set_mcp_access(state: State<AppState>, on: bool) -> AppResult<()> {
+    let conn = state.db();
+    state.session().require_unlocked()?;
+    settings::set_mcp_access(&conn, on)
+}
+
+/// The command that registers this binary with Claude Code.
+#[tauri::command]
+pub fn mcp_command(state: State<AppState>) -> AppResult<String> {
+    state.session().require_entered()?;
+    Ok(mcp::register_command(&std::env::current_exe()?))
 }
