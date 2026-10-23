@@ -375,6 +375,7 @@ fn reply(app: &AppHandle, id: i64, cancel: &Arc<AtomicBool>) -> AppResult<()> {
         Io {
             db: &db,
             key: history_key(&state).ok(),
+            unlocked: &|| history_key(&state).is_ok(),
             today: &today,
             on_text: &mut |text| {
                 emit(AssistantEvent::Text {

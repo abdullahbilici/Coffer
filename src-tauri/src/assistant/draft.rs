@@ -1145,7 +1145,8 @@ impl Writer<'_, '_> {
             Source::Note => {
                 let note = self.ws.note(Ref::Id(handle.id)).ok_or_else(missing)?;
                 match handle.index {
-                    None if note.secure => Ok(()),
+                    // A secure note's values are found when the draft is applied.
+                    _ if note.secure => Ok(()),
                     Some(i) if note.text.contains(&format!("`!{i}!`")) => Ok(()),
                     _ => Err(missing()),
                 }

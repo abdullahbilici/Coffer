@@ -15,11 +15,11 @@ import {
   Wallet,
   type LucideIcon,
 } from "lucide-react";
-import type { Copy, Run } from "../../app/actions";
+import type { Copy, Run, VaultActions } from "../../app/actions";
 import type { Thread } from "../../hooks/useAssistant";
 import type { Session } from "../../hooks/useSession";
 import type { ToolCall, Tree } from "../../lib/api";
-import { threadBlocks, toolLabel, type Block } from "../../lib/assistant";
+import { replySources, threadBlocks, toolLabel, type Block } from "../../lib/assistant";
 import { cx } from "../../lib/cx";
 import { AssistantReply } from "./AssistantReply";
 import { DraftCard } from "./DraftCard";
@@ -55,7 +55,7 @@ const TOOL_ICONS: Record<string, LucideIcon> = {
 /** Within this distance of the bottom, new content keeps the thread scrolled to the end. */
 const STICK_PX = 48;
 
-type Shared = { tree: Tree; session: Session; run: Run; onCopy: Copy };
+type Shared = { tree: Tree; session: Session; run: Run; onCopy: Copy; actions: VaultActions };
 
 type Drafts = {
   onApply: (messageId: number) => Promise<void>;
@@ -117,7 +117,14 @@ export function AssistantThread({ thread, replying, onApply, onDiscard, ...share
               {...shared}
             />
           ))}
-          {thread.streaming && <AssistantReply text={thread.streaming} {...shared} />}
+          {thread.streaming && (
+            <AssistantReply
+              text={thread.streaming}
+              session={shared.session}
+              run={shared.run}
+              onCopy={shared.onCopy}
+            />
+          )}
           {waiting && (
             <span className={styles.thinking} aria-label="Thinking">
               <span />
@@ -167,8 +174,19 @@ function ThreadBlock({
           onDiscard={() => onDiscard(block.id)}
         />
       );
-    case "reply":
-      return <AssistantReply text={block.text} {...shared} />;
+    case "reply": {
+      const { tree, actions } = shared;
+      const list = replySources(block.text, block.read, tree);
+      return (
+        <AssistantReply
+          text={block.text}
+          session={shared.session}
+          run={shared.run}
+          onCopy={shared.onCopy}
+          sources={{ list, tree, actions }}
+        />
+      );
+    }
     case "tools":
       return (
         <div className={styles.tools}>

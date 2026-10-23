@@ -1,5 +1,7 @@
-//! Read-only tools the model calls. They read stored rows and templates only, never decrypt
-//! anything, and show every secret as a handle. Results are compact text for a small model.
+//! Read-only tools the model calls. Results are compact text for a small model. On their own
+//! they read stored rows and templates only, never decrypt anything, and show every secret as
+//! a handle (the MCP server). Given the in-app assistant's decrypted vault (`Plain`), they show
+//! each secret next to its handle and secure notes in full.
 
 use std::collections::HashMap;
 
@@ -8,6 +10,7 @@ use serde_json::{Value, json};
 
 use super::{
     handles::{Handle, Source, mask},
+    plain::Plain,
     spend::{self, Totals},
 };
 use crate::{
@@ -34,9 +37,9 @@ pub struct Spec {
     pub parameters: Value,
 }
 
-/// The tool definitions in Ollama's format.
+/// The tool definitions in Ollama's format, as the in-app assistant reads them.
 pub fn specs() -> Value {
-    catalog()
+    catalog_for(true)
         .into_iter()
         .map(|spec| {
             json!({
@@ -51,7 +54,13 @@ pub fn specs() -> Value {
         .collect()
 }
 
+/// The tools as the MCP server describes them: secrets are handles only.
 pub fn catalog() -> Vec<Spec> {
+    catalog_for(false)
+}
+
+/// `values`: the tools run with the decrypted vault (`run_with`).
+fn catalog_for(values: bool) -> Vec<Spec> {
     let project = json!({
         "type": "string",
         "description": "Project name or id. \"personal\" means payments and todos without a project.",
@@ -82,13 +91,21 @@ pub fn catalog() -> Vec<Spec> {
         ),
         tool(
             "search",
-            "Finds notes, projects, folders, tags, todos and payments by words in their names, tags or note text.",
+            if values {
+                "Finds notes, projects, folders, tags, todos and payments by words in their names, tags or note text (secure notes and secret values included)."
+            } else {
+                "Finds notes, projects, folders, tags, todos and payments by words in their names, tags or note text."
+            },
             json!({ "query": { "type": "string" } }),
             &["query"],
         ),
         tool(
             "get_note",
-            "A note's full text, with secrets as handles.",
+            if values {
+                "A note's full text. Each secret shows as [handle: value], e.g. [n12.0: hunter2]; a secure note shows its whole text, its values marked the same way."
+            } else {
+                "A note's full text, with secrets as handles."
+            },
             json!({ "id": { "type": "integer" } }),
             &["id"],
         ),
@@ -117,10 +134,25 @@ pub fn catalog() -> Vec<Spec> {
     ]
 }
 
-/// Runs a tool. Failures come back as text, so the model can correct itself.
+/// Runs a tool, secrets as handles. Failures come back as text, so the model can correct itself.
 pub fn run(conn: &Connection, today: &str, name: &str, args: &Value) -> String {
-    let result = Vault::load(conn).and_then(|vault| {
-        let tools = Tools { vault, today };
+    run_with(conn, None, today, name, args)
+}
+
+/// Runs a tool; with `plain`, secrets show next to their handles and secure notes in full.
+pub fn run_with(
+    conn: &Connection,
+    plain: Option<&Plain>,
+    today: &str,
+    name: &str,
+    args: &Value,
+) -> String {
+    let result = Vault::load(conn, plain).and_then(|vault| {
+        let tools = Tools {
+            vault,
+            today,
+            plain,
+        };
         match name {
             "list_projects" => Ok(tools.list_projects()),
             "get_project" => tools.get_project(conn, args),
@@ -147,22 +179,31 @@ struct Vault {
     items: Vec<ItemSummary>,
     todos: Vec<Todo>,
     payments: Vec<Payment>,
-    /// Readable bodies by note id, secrets already shown as handles.
+    /// Bodies by note id as the model reads them (`show`); secure ones only with `Plain`.
     bodies: HashMap<i64, String>,
 }
 
 impl Vault {
-    fn load(conn: &Connection) -> AppResult<Self> {
+    fn load(conn: &Connection, plain: Option<&Plain>) -> AppResult<Self> {
+        let items = items::list(conn)?;
+        let mut bodies: HashMap<i64, String> = items::templates(conn)?
+            .into_iter()
+            .map(|(id, template)| (id, show(plain, &template, Source::Note, id)))
+            .collect();
+        if let Some(plain) = plain {
+            for item in items.iter().filter(|i| i.secure) {
+                if let Some(body) = plain.secure_body(item.id) {
+                    bodies.insert(item.id, body);
+                }
+            }
+        }
         Ok(Self {
             projects: projects::list(conn)?,
             folders: folders::list(conn)?,
-            items: items::list(conn)?,
+            items,
             todos: todos::list(conn)?,
             payments: payments::list(conn)?,
-            bodies: items::templates(conn)?
-                .into_iter()
-                .map(|(id, template)| (id, mask(&template, Source::Note, id)))
-                .collect(),
+            bodies,
         })
     }
 
@@ -269,9 +310,18 @@ impl Vault {
     }
 }
 
+/// A template with its secrets as handles, or as handles with values given `plain`.
+fn show(plain: Option<&Plain>, template: &str, source: Source, id: i64) -> String {
+    match plain {
+        Some(plain) => plain.show(template, source, id),
+        None => mask(template, source, id),
+    }
+}
+
 struct Tools<'a> {
     vault: Vault,
     today: &'a str,
+    plain: Option<&'a Plain>,
 }
 
 impl Tools<'_> {
@@ -309,7 +359,7 @@ impl Tools<'_> {
         };
         let project = projects::get(conn, summary.id)?;
         let mut out = format!("project {}: {}", project.id, project.name);
-        let overview = mask(&project.readme, Source::Overview, project.id);
+        let overview = show(self.plain, &project.readme, Source::Overview, project.id);
         if overview.trim().is_empty() {
             out.push_str("\nOverview: empty");
         } else {
@@ -395,7 +445,7 @@ impl Tools<'_> {
             let place = v.place(i.project_id, i.folder_id);
             let body = v.bodies.get(&i.id).map_or("", String::as_str);
             let mut line = format!("{} in {place}", note_line(i));
-            if let Some(snippet) = snippet(body, &words) {
+            if let Some(snippet) = snippet(body, &words, self.plain.is_some()) {
                 line.push_str(&format!(" — text: \"{snippet}\""));
             }
             consider(
@@ -463,12 +513,20 @@ impl Tools<'_> {
                     id: s.id,
                     index: None,
                 };
-                out.push_str(&format!(
-                    "\nThe whole note is secret: {handle}. Its text is hidden from you."
-                ));
+                match self.vault.bodies.get(&s.id) {
+                    Some(body) => out.push_str(&format!(
+                        "\nThe whole note is secret: {handle}. Its text:\n\n{body}"
+                    )),
+                    None => out.push_str(&format!(
+                        "\nThe whole note is secret: {handle}. Its text is hidden from you."
+                    )),
+                }
             }
             Some(body) if !body.trim().is_empty() => {
-                out.push_str(&format!("\n\n{}", mask(&body, Source::Note, s.id)));
+                out.push_str(&format!(
+                    "\n\n{}",
+                    show(self.plain, &body, Source::Note, s.id)
+                ));
             }
             _ => out.push_str("\nEmpty."),
         }
@@ -495,7 +553,7 @@ impl Tools<'_> {
         let mut out = format!("{} {kind}:", todos.len());
         for t in todos {
             out.push_str(&format!("\n- {}", todo_line(t, v, self.today)));
-            let description = mask(&t.description, Source::Todo, t.id);
+            let description = show(self.plain, &t.description, Source::Todo, t.id);
             let description = description.split_whitespace().collect::<Vec<_>>().join(" ");
             if !description.is_empty() {
                 out.push_str(&format!("\n  {}", clip(&description, 300)));
@@ -674,13 +732,29 @@ fn todo_line(todo: &Todo, vault: &Vault, today: &str) -> String {
     line
 }
 
-/// The line of `body` around the first matched word, shortened.
-fn snippet(body: &str, words: &[&str]) -> Option<String> {
-    let line = body.lines().find(|line| {
+/// The line of `body` matching the most words, shortened. A line holding a value is
+/// never cut, since a cut value would be wrong: it stays out instead, for get_note to show.
+fn snippet(body: &str, words: &[&str], values: bool) -> Option<String> {
+    const MAX: usize = 120;
+    let matched = |line: &str| {
         let lower = line.to_lowercase();
-        words.iter().any(|w| lower.contains(w))
-    })?;
-    Some(clip(line.trim(), 120))
+        words.iter().filter(|w| lower.contains(*w)).count()
+    };
+    // The first line among those matching the most words.
+    let line = body
+        .lines()
+        .map(|line| (matched(line), line))
+        .filter(|(n, _)| *n > 0)
+        .fold(None, |best: Option<(usize, &str)>, hit| match best {
+            Some(b) if b.0 >= hit.0 => Some(b),
+            _ => Some(hit),
+        })?
+        .1;
+    let line = line.trim();
+    if values && line.len() > MAX && line.contains(": ") {
+        return Some("…".to_string());
+    }
+    Some(clip(line, MAX))
 }
 
 /// Cuts `text` to `max` bytes at a char boundary, marking the cut.
@@ -777,7 +851,7 @@ mod tests {
             0,
         )
         .unwrap();
-        let secure = Body::Secure(seal_with(&key, "whole-body-secret").unwrap());
+        let secure = Body::Secure(seal_with(&key, "Recovery: `whole-body-secret`").unwrap());
         items::insert(
             &conn,
             &ItemRecord {
@@ -883,11 +957,39 @@ mod tests {
     }
 
     #[test]
+    fn unlocked_reads_show_values_next_to_handles() {
+        let conn = vault();
+        let plain = Plain::open(&conn, &Zeroizing::new(vec![9; 32])).unwrap();
+        let read = |name: &str, args: Value| run_with(&conn, Some(&plain), TODAY, name, &args);
+        let note = read("get_note", json!({ "id": 1 }));
+        assert!(note.contains("Password: [n1.0: hunter2-panel]"), "{note}");
+        let secure = read("get_note", json!({ "id": 2 }));
+        assert!(
+            secure.contains("[n2]") && secure.contains("[n2.0: whole-body-secret]"),
+            "{secure}"
+        );
+        let project = read("get_project", json!({ "project": "acme" }));
+        assert!(
+            project.contains("AWS root: [p1.0: AKIAOVERVIEW]"),
+            "{project}"
+        );
+        let todos = read("list_todos", json!({}));
+        assert!(todos.contains("PIN [t1.0: todo-pin-4242]"), "{todos}");
+        let found = read("search", json!({ "query": "whole" }));
+        assert!(found.contains("note 2: Recovery codes"), "{found}");
+        // The MCP server's descriptions never promise values.
+        let mcp = catalog();
+        assert!(mcp.iter().all(|spec| !spec.description.contains("value")));
+    }
+
+    #[test]
     fn search_ranks_full_matches_and_quotes_text() {
         let conn = vault();
         let found = call(&conn, "search", json!({ "query": "panel url" }));
         assert!(found.starts_with("1 result for"), "{found}");
         assert!(found.contains("text: \"URL: `https://panel.example.com`\""));
+        let best = call(&conn, "search", json!({ "query": "panel user apo" }));
+        assert!(best.contains("text: \"User: `apo`\""), "{best}");
         let partial = call(&conn, "search", json!({ "query": "hosting zebra" }));
         assert!(partial.contains("folder 2: Hosting") && partial.contains("note 1"));
         assert!(call(&conn, "search", json!({ "query": "zebra" })).starts_with("Nothing"));

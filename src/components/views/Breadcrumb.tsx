@@ -44,8 +44,8 @@ export function pathCrumbs(
 
 type Props = {
   crumbs: Crumb[];
-  /** `trail` sits above a title; `path` is the page header itself. */
-  variant?: "trail" | "path";
+  /** `trail` sits above a title; `path` is the page header itself; `inline` sits in a row. */
+  variant?: "trail" | "path" | "inline";
 };
 
 /** "Project > Folder > Sub" trail; each ancestor navigates up the hierarchy. */

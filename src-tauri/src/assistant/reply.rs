@@ -1,6 +1,8 @@
 //! One reply to a conversation's last message, the same for the app and the evaluation: user
 //! text reaches the model with its values as handles, tools read the vault or add to a draft,
-//! and a draft that isn't empty is stored as the reply's last turn.
+//! and a draft that isn't empty is stored as the reply's last turn. While the vault is unlocked
+//! the model reads secrets next to their handles; history keeps the handles only, and every
+//! word of the reply passes `redact` before it is shown or stored.
 //!
 //! A message with pasted text is an import: the paste goes to the model in chunks of whole
 //! blocks with numbered lines, so no single answer gets huge, and every chunk adds to the same
@@ -13,20 +15,29 @@ use serde_json::Value;
 
 use super::{
     DraftStatus, Turn,
-    agent::{self, Hooks, Model},
+    agent::{self, Hooks, Model, ToolResult},
     draft::{self, Ctx, Draft},
     inputs::Inputs,
+    plain::Plain,
+    redact::{self, Known},
     tools,
 };
-use crate::{crypto::VaultKey, error::AppResult};
+use crate::{
+    crypto::VaultKey,
+    db::{items, todos},
+    error::AppResult,
+};
 
 /// About this much numbered text goes to the model per import chunk.
 const CHUNK_CHARS: usize = 1_800;
 
 pub struct Io<'a> {
     pub db: &'a dyn Fn() -> MutexGuard<'a, Connection>,
-    /// Lets a draft skip secrets a note holds already; `None` checks readable values only.
+    /// Lets the model read secrets and a draft skip the ones a note holds already; `None`
+    /// keeps every secret a handle.
     pub key: Option<VaultKey>,
+    /// Whether the unlock window is still open; once it closes, tools show handles only.
+    pub unlocked: &'a dyn Fn() -> bool,
     /// `YYYY-MM-DD`.
     pub today: &'a str,
     /// The visible text of the reply being written, so far.
@@ -65,6 +76,7 @@ pub fn reply(model: &dyn Model, prompts: &Prompts, history: &[Turn], io: Io) -> 
     let Io {
         db,
         key,
+        unlocked,
         today,
         on_text,
         save,
@@ -72,11 +84,32 @@ pub fn reply(model: &dyn Model, prompts: &Prompts, history: &[Turn], io: Io) -> 
         check,
     } = io;
     let (inputs, mut turns) = take_inputs(history);
-    let stored = draft::stored_values(&db(), key.as_ref())?;
+    let (stored, plain, known) = {
+        let conn = db();
+        let plain = key.as_ref().map(|k| Plain::open(&conn, k)).transpose()?;
+        let known = match &plain {
+            Some(plain) => known_values(&conn, plain)?,
+            None => Known::default(),
+        };
+        (draft::stored_values(&conn, key.as_ref())?, plain, known)
+    };
     drop(key);
+    let on_text = &mut |text: &str| on_text(&redact::redact_partial(text, &known));
+    let save = &mut |turn: &Turn| match turn {
+        Turn::Assistant {
+            text,
+            tool_calls,
+            stopped,
+        } => save(&Turn::Assistant {
+            text: redact::redact(text, &known),
+            tool_calls: tool_calls.clone(),
+            stopped: *stopped,
+        }),
+        _ => save(turn),
+    };
     let mut draft = Draft::default();
 
-    let mut run_tool = |draft: &mut Draft, name: &str, args: &Value| -> AppResult<String> {
+    let mut run_tool = |draft: &mut Draft, name: &str, args: &Value| -> AppResult<ToolResult> {
         check()?;
         let conn = db();
         let ctx = Ctx {
@@ -85,8 +118,17 @@ pub fn reply(model: &dyn Model, prompts: &Prompts, history: &[Turn], io: Io) -> 
             inputs: &inputs,
             stored: &stored,
         };
-        Ok(draft::run(&ctx, draft, name, args)
-            .unwrap_or_else(|| tools::run(&conn, today, name, args)))
+        if let Some(text) = draft::run(&ctx, draft, name, args) {
+            return Ok(text.into());
+        }
+        let masked = tools::run(&conn, today, name, args);
+        Ok(match plain.as_ref().filter(|_| unlocked()) {
+            Some(plain) => ToolResult {
+                model: tools::run_with(&conn, Some(plain), today, name, args),
+                stored: masked,
+            },
+            None => masked.into(),
+        })
     };
 
     let paste = match turns.last() {
@@ -170,6 +212,17 @@ pub fn reply(model: &dyn Model, prompts: &Prompts, history: &[Turn], io: Io) -> 
     result
 }
 
+/// What the reply may show of the vault: its secrets with their handles, and its copyable values.
+fn known_values(conn: &Connection, plain: &Plain) -> AppResult<Known> {
+    let mut copyable: Vec<String> = Vec::new();
+    let templates = items::templates(conn)?.into_iter().map(|(_, t)| t);
+    let descriptions = todos::list(conn)?.into_iter().map(|t| t.description);
+    for text in templates.chain(descriptions) {
+        copyable.extend(redact::copyable_spans(&text).map(str::to_string));
+    }
+    Ok(Known::new(plain.secrets(), copyable))
+}
+
 const NOTHING_DRAFTED: &str = "Nothing was drafted: no write tool was called. Call the write \
 tool now if a change is needed, without asking.";
 
@@ -185,7 +238,7 @@ fn claims_a_draft(turns: &[Turn]) -> bool {
     ["draft", "taslak"].iter().any(|w| text.contains(w))
 }
 
-type RunTool<'a> = dyn FnMut(&mut Draft, &str, &Value) -> AppResult<String> + 'a;
+type RunTool<'a> = dyn FnMut(&mut Draft, &str, &Value) -> AppResult<ToolResult> + 'a;
 
 #[allow(clippy::too_many_arguments)]
 fn import(
@@ -346,7 +399,11 @@ mod tests {
     use super::*;
     use crate::{
         assistant::{Reply, Request, ToolCall},
-        db::{items, open_in_memory, projects},
+        commands::sealing::seal_inline_with,
+        db::{
+            items::{Body, ItemRecord},
+            open_in_memory, projects,
+        },
     };
 
     #[test]
@@ -381,7 +438,9 @@ mod tests {
 
     impl Model for Script {
         fn chat(&self, request: &Request, _: &mut dyn FnMut(&str)) -> AppResult<Reply> {
-            if let Some(Turn::User { text, .. }) = request.turns.last() {
+            if let Some(Turn::User { text, .. } | Turn::Tool { result: text, .. }) =
+                request.turns.last()
+            {
                 self.asked.borrow_mut().push(text.clone());
             }
             Ok(if self.replies.borrow().is_empty() {
@@ -401,6 +460,82 @@ mod tests {
             }],
             ..Reply::default()
         }
+    }
+
+    #[test]
+    fn the_model_reads_values_but_the_user_sees_the_vault() {
+        let key = Zeroizing::new(vec![1; 32]);
+        let conn = open_in_memory();
+        let acme = projects::insert(&conn, "Acme Shop", "", 0).unwrap();
+        let token = "ghp_8fK2mQ9xL4vR7tY1wZ3pN6sB0cD5eH2jA9kU";
+        let (template, secrets) =
+            seal_inline_with(&key, &format!("User: `apo`\nToken: `!{token}!`"))
+                .unwrap()
+                .unwrap();
+        items::insert(
+            &conn,
+            &ItemRecord {
+                project_id: acme,
+                folder_id: None,
+                title: "GitHub",
+                body: &Body::Inline { template, secrets },
+                tags: &[],
+            },
+            0,
+        )
+        .unwrap();
+        let db = Mutex::new(conn);
+        // The model copies the token with one character dropped.
+        let miscopied = format!("{}{}", &token[..10], &token[11..]);
+        let model = Script {
+            replies: RefCell::new(vec![
+                calls("get_note", json!({ "id": 1 })),
+                Reply {
+                    text: format!("The token is `{miscopied}` (GitHub)."),
+                    ..Reply::default()
+                },
+            ]),
+            asked: RefCell::new(Vec::new()),
+        };
+        let saved = RefCell::new(Vec::new());
+        let streamed = RefCell::new(String::new());
+        let lock = || db.lock().unwrap();
+        reply(
+            &model,
+            &Prompts {
+                chat: "chat",
+                import: "import",
+            },
+            &[Turn::user("github token?")],
+            Io {
+                db: &lock,
+                key: Some(key),
+                unlocked: &|| true,
+                today: "2026-10-23",
+                on_text: &mut |t| *streamed.borrow_mut() = t.to_string(),
+                save: &mut |turn| {
+                    saved.borrow_mut().push(turn.clone());
+                    Ok(())
+                },
+                cancelled: &|| false,
+                check: &|| Ok(()),
+            },
+        )
+        .unwrap();
+        assert!(model.asked.borrow()[1].contains(&format!("Token: [n1.0: {token}]")));
+        let saved = saved.borrow();
+        let Turn::Tool { result, .. } = &saved[1] else {
+            panic!("{saved:?}");
+        };
+        assert!(
+            result.contains("Token: [n1.0]") && !result.contains(token),
+            "{result}"
+        );
+        let Turn::Assistant { text, .. } = &saved[2] else {
+            panic!("{saved:?}");
+        };
+        assert_eq!(text, "The token is [n1.0] (GitHub).");
+        assert!(!streamed.borrow().contains("ghp_"), "{}", streamed.borrow());
     }
 
     #[test]
@@ -438,6 +573,7 @@ mod tests {
             Io {
                 db: &lock,
                 key: Some(Zeroizing::new(vec![1; 32])),
+                unlocked: &|| true,
                 today: "2026-10-23",
                 on_text: &mut |_| {},
                 save: &mut |turn| {
@@ -501,6 +637,7 @@ mod tests {
             Io {
                 db: &lock,
                 key: None,
+                unlocked: &|| false,
                 today: "2026-10-23",
                 on_text: &mut |_| {},
                 save: &mut |turn| {

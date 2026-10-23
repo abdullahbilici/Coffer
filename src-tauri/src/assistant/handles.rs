@@ -1,14 +1,16 @@
-//! Handles stand in for secret values wherever the model reads Coffer: `[n12.0]` is secret 0 of
-//! note 12, `[p3.0]` one in project 3's overview, `[t4.0]` one in todo 4's description, and
-//! `[n12]` the whole body of secure note 12. A handle names where a value lives, so tools build
-//! them from templates without decrypting anything, and only the user resolves them.
-//! Mirrored by `src/lib/handles.ts`.
+//! Handles name where a secret lives: `[n12.0]` is secret 0 of note 12, `[p3.0]` one in project
+//! 3's overview, `[t4.0]` one in todo 4's description, `[n12]` the whole body of secure note 12
+//! and `[n12.3]` value 3 inside it (`inputs::note_values`). Tools build them from templates
+//! without decrypting anything; the in-app assistant also reads the value next to each handle
+//! while the vault is unlocked (`plain`). What the user sees is always resolved here, from the
+//! vault. Mirrored by `src/lib/assistant.ts`.
 
 use std::fmt;
 
 use rusqlite::Connection;
 use zeroize::Zeroizing;
 
+use super::inputs;
 use crate::{
     commands::sealing::{open_spans, open_with},
     crypto::VaultKey,
@@ -17,7 +19,7 @@ use crate::{
     secrets,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Source {
     Note,
     Overview,
@@ -87,9 +89,14 @@ pub fn reveal(conn: &Connection, key: &VaultKey, handle: Handle) -> AppResult<Ze
         Source::Note => {
             let encrypted = items::encrypted(conn, handle.id)?;
             if encrypted.template.is_none() {
+                let body = open_with(key, None, &encrypted.sealed)?;
                 return match handle.index {
-                    None => open_with(key, None, &encrypted.sealed),
-                    Some(_) => Err(AppError::NotFound),
+                    None => Ok(body),
+                    Some(index) => inputs::note_values(handle.id, &body)
+                        .1
+                        .get(index)
+                        .map(|value| Zeroizing::new(value.clone()))
+                        .ok_or(AppError::NotFound),
                 };
             }
             encrypted.sealed

@@ -8,8 +8,10 @@
 //! renders parts of it as messy dumps, and runs the same reply path as the app: imports into an
 //! empty vault, an import of new and changed values into a full one, and natural-language
 //! commands. Drafts are applied to an in-memory database and scored on what ends up stored.
-//! `COFFER_EVAL_TASKS` picks tasks (import_S, import_M, add, edit), `COFFER_EVAL_URL` the server;
-//! results go to `target/eval/<model>.json`.
+//! `ask` asks for passwords and keys of stored notes, secure ones included, and checks the value
+//! the user would see (the chip's, from the vault) and that the answer names its source.
+//! `COFFER_EVAL_TASKS` picks tasks (import_S, import_M, add, edit, ask), `COFFER_EVAL_URL` the
+//! server; results go to `target/eval/<model>.json`.
 
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
@@ -25,13 +27,15 @@ use zeroize::Zeroizing;
 use super::{
     Reply, Request, Turn,
     agent::Model,
-    draft, fields, import_prompt,
+    draft, fields,
+    handles::{self, Handle},
+    import_prompt,
     ollama::Ollama,
     reply::{self, Io, Prompts},
-    system_prompt,
+    system_prompt, visible_text,
 };
 use crate::{
-    commands::sealing::{open_with, seal_inline_with},
+    commands::sealing::{open_with, seal_inline_with, seal_with},
     crypto::VaultKey,
     db::{
         folders,
@@ -863,12 +867,17 @@ struct Outcome {
 struct Traced<'a> {
     model: &'a Ollama,
     trace: &'a Mutex<std::fs::File>,
+    /// The visible text of the last model reply, before `redact`.
+    last: std::cell::RefCell<String>,
 }
 
 impl Model for Traced<'_> {
     fn chat(&self, request: &Request, on_text: &mut dyn FnMut(&str)) -> AppResult<Reply> {
         let started = Instant::now();
         let reply = self.model.chat(request, on_text);
+        if let Ok(r) = &reply {
+            *self.last.borrow_mut() = visible_text(&r.text).trim().to_string();
+        }
         if let Ok(mut file) = self.trace.lock() {
             let _ = match &reply {
                 Ok(r) => writeln!(
@@ -906,6 +915,7 @@ fn run(model: &Traced, db: &Mutex<Connection>, history: Vec<Turn>, apply: bool) 
         Io {
             db: &lock,
             key: Some(key()),
+            unlocked: &|| true,
             today: TODAY,
             on_text: &mut on_text,
             save: &mut save,
@@ -1476,6 +1486,208 @@ fn edit_task(model: &Traced) -> Value {
 }
 
 /// Whether a command's draft did exactly what was asked (checked after applying it).
+/// Asks for secrets of a seeded vault, inline and inside secure notes, one question per
+/// conversation. A question passes when a chip in the stored answer holds the stored value; the
+/// answer cites its source when it shows a secret of the right note or names it.
+fn ask_task(model: &Traced) -> Value {
+    let mut g = Gen {
+        r: Rng(0x0a5c),
+        used: HashSet::new(),
+        next_note: 0,
+    };
+    let mut vault = g.vault(8);
+    let db = Mutex::new(open_in_memory());
+    seed(&db.lock().unwrap(), &mut vault);
+
+    // (question, expected value, note id, note title, secure)
+    let mut questions: Vec<(String, String, i64, String, bool)> = Vec::new();
+    let clients: Vec<&TrueProject> = vault.iter().filter(|p| p.name != "Personal").collect();
+    let mut inline: Vec<(&TrueProject, &TrueNote, &TrueField)> = Vec::new();
+    for p in &vault {
+        for n in &p.notes {
+            for f in n.fields.iter().filter(|f| f.secret != Some(false)) {
+                inline.push((p, n, f));
+            }
+        }
+    }
+    let picks: Vec<usize> = (0..inline.len()).collect();
+    for (i, k) in g.r.sample(&picks, 8).into_iter().enumerate() {
+        let (p, n, f) = inline[k];
+        let title = n.title();
+        let question = if i % 2 == 0 {
+            format!("What is the {} of {title} in {}?", f.label, p.name)
+        } else {
+            format!(
+                "{} projesindeki {title} {} nedir?",
+                p.name,
+                tr_label(&f.label)
+            )
+        };
+        questions.push((question, f.value.clone(), n.id, title, false));
+    }
+
+    // Secure notes: values that live only inside their encrypted text.
+    let conn = db.lock().unwrap();
+    for (i, p) in clients.iter().take(4).enumerate() {
+        let project = projects::list(&conn)
+            .unwrap()
+            .into_iter()
+            .find(|x| x.name == p.name)
+            .unwrap();
+        let (title, body, question, value) = match i {
+            0 => {
+                let jwt = g.value("jwt");
+                let body = format!(
+                    "API_TOKEN={jwt}\nDATABASE_URL=postgres://{}:{}@{}:5432/{}\nRotate every 90 days.",
+                    g.value("user"),
+                    g.value("pw"),
+                    g.value("host"),
+                    g.value("dbname")
+                );
+                (
+                    "Deploy secrets",
+                    body,
+                    format!("What's the API token in the {} deploy secrets?", p.name),
+                    jwt,
+                )
+            }
+            1 => {
+                let pw = g.value("pw");
+                let body = format!(
+                    "Rescue console for the main server.\nRoot password: {pw}\nSSH port 2222, key on the YubiKey."
+                );
+                (
+                    "Server access",
+                    body,
+                    format!("{} sunucusunun root şifresi ne?", p.name),
+                    pw,
+                )
+            }
+            2 => {
+                let dsn = g.value("dsn");
+                let key = g.value("skproj");
+                let body = format!(
+                    "SENTRY_DSN={dsn}\nOPENAI_API_KEY={key}\nBoth go into .env.production."
+                );
+                (
+                    ".env (production)",
+                    body,
+                    format!("I need the OpenAI API key for {}.", p.name),
+                    key,
+                )
+            }
+            _ => {
+                let codes: Vec<String> = (0..3).map(|_| g.value("backup")).collect();
+                let body = format!(
+                    "Admin account backup codes, use once each:\n{}\n{}\n{}",
+                    codes[0], codes[1], codes[2]
+                );
+                (
+                    "Recovery codes",
+                    body,
+                    format!(
+                        "Give me one recovery code for the {} admin account.",
+                        p.name
+                    ),
+                    codes[0].clone(),
+                )
+            }
+        };
+        let sealed = seal_with(&key(), &body).unwrap();
+        let id = items::insert(
+            &conn,
+            &ItemRecord {
+                project_id: project.id,
+                folder_id: None,
+                title,
+                body: &Body::Secure(sealed),
+                tags: &[],
+            },
+            0,
+        )
+        .unwrap();
+        // Any of the codes answers the recovery question.
+        let value = if title == "Recovery codes" {
+            body.lines().skip(1).collect::<Vec<_>>().join("\n")
+        } else {
+            value
+        };
+        questions.push((question, value, id, title.to_string(), true));
+    }
+    drop(conn);
+
+    let mut rows = Vec::new();
+    let (mut right, mut cited, mut netted, mut plain) = (0, 0, 0, 0);
+    let (mut secure_right, mut secure_total) = (0, 0);
+    let started = Instant::now();
+    for (question, expected, note, title, secure) in &questions {
+        let out = run(model, &db, vec![Turn::user(question.clone())], false);
+        let answer = out
+            .saved
+            .iter()
+            .rev()
+            .find_map(|t| match t {
+                Turn::Assistant {
+                    text, tool_calls, ..
+                } if tool_calls.is_empty() && !text.is_empty() => Some(text.clone()),
+                _ => None,
+            })
+            .unwrap_or_default();
+        let shown = chip_values(&db.lock().unwrap(), &answer);
+        let ok = shown.iter().any(|(_, v)| {
+            !v.is_empty()
+                && (v == expected || (expected.contains('\n') && expected.lines().any(|l| l == v)))
+        });
+        let source = shown.iter().any(|(h, _)| h.id == *note)
+            || answer.to_lowercase().contains(&title.to_lowercase());
+        let raw = model.last.borrow().clone();
+        let used_net = raw != answer;
+        let leaked = expected.lines().any(|v| v.len() >= 6 && answer.contains(v));
+        right += usize::from(ok);
+        cited += usize::from(source);
+        netted += usize::from(used_net);
+        plain += usize::from(leaked);
+        if *secure {
+            secure_total += 1;
+            secure_right += usize::from(ok);
+        }
+        rows.push(json!({
+            "question": question,
+            "secure": secure,
+            "right": ok,
+            "source": source,
+            "safety_net": used_net,
+            "answer": answer,
+            "error": out.error,
+            "seconds": out.seconds.round(),
+        }));
+    }
+    let n = questions.len();
+    json!({
+        "chip_value_right": pct(right, n),
+        "secure_notes_right": pct(secure_right, secure_total),
+        "source_cited": pct(cited, n),
+        "safety_net_changed_answer": pct(netted, n),
+        "values_shown_plain": plain,
+        "seconds": started.elapsed().as_secs_f64().round(),
+        "questions": rows,
+    })
+}
+
+/// Every handle in an answer with the value the app would show for it.
+fn chip_values(conn: &Connection, answer: &str) -> Vec<(Handle, String)> {
+    let mut out = Vec::new();
+    for part in answer.split('[').skip(1) {
+        let Some(end) = part.find(']') else { continue };
+        if let Ok(handle) = Handle::parse(&part[..end])
+            && let Ok(value) = handles::reveal(conn, &key(), handle)
+        {
+            out.push((handle, value.to_string()));
+        }
+    }
+    out
+}
+
 fn check_edit(conn: &Connection, ops: &[draft::Op], expect: &Value, history: &[Turn]) -> bool {
     use draft::Op;
     let (inputs, _) = reply::take_inputs(history);
@@ -1546,8 +1758,8 @@ fn check_edit(conn: &Connection, ops: &[draft::Op], expect: &Value, history: &[T
 fn eval() {
     let model_name = std::env::var("COFFER_EVAL_MODEL").unwrap_or_else(|_| "qwen3.8:27b".into());
     let url = std::env::var("COFFER_EVAL_URL").unwrap_or_else(|_| "http://localhost:11434".into());
-    let tasks =
-        std::env::var("COFFER_EVAL_TASKS").unwrap_or_else(|_| "edit,import_S,add,import_M".into());
+    let tasks = std::env::var("COFFER_EVAL_TASKS")
+        .unwrap_or_else(|_| "edit,import_S,add,import_M,ask".into());
     let ollama = Ollama::new(&url, &model_name, None, Arc::new(AtomicBool::new(false))).unwrap();
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("target/eval");
     std::fs::create_dir_all(&dir).unwrap();
@@ -1557,6 +1769,7 @@ fn eval() {
     let model = Traced {
         model: &ollama,
         trace: &trace,
+        last: std::cell::RefCell::new(String::new()),
     };
     let mut report =
         serde_json::from_str::<Value>(&std::fs::read_to_string(&path).unwrap_or_default())
@@ -1570,6 +1783,7 @@ fn eval() {
             "import_M" => import_task(&model, 12, 0x5eed_0012),
             "add" => add_task(&model),
             "edit" => edit_task(&model),
+            "ask" => ask_task(&model),
             other => panic!("unknown task {other}"),
         };
         println!(

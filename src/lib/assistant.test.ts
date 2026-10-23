@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Message, Tree } from "./api";
-import { threadBlocks, toolLabel, withSecretChips } from "./assistant";
+import { replySources, threadBlocks, toolLabel, withSecretChips } from "./assistant";
 
 const tree: Tree = {
   projects: [{ id: 1, name: "Acme" }],
@@ -22,6 +22,11 @@ const tree: Tree = {
   todos: [],
   payments: [],
 };
+tree.projects.push({ id: 2, name: "Muhit" });
+tree.items.push(
+  { ...tree.items[0], id: 13, title: "Redis", hasSecrets: false },
+  { ...tree.items[0], id: 20, projectId: 2, folderId: null, title: ".env (staging)", secure: true },
+);
 
 describe("withSecretChips", () => {
   it("turns handles into secret markers, reusing repeated ones", () => {
@@ -102,5 +107,65 @@ describe("threadBlocks", () => {
     expect(threadBlocks(messages).map((b) => b.kind)).toEqual(["user", "tools", "draft"]);
     const user = threadBlocks(messages)[0];
     expect(user.kind === "user" && user.paste).toBe("a\nb");
+  });
+});
+
+describe("replySources", () => {
+  const at = { createdAt: 0 };
+  const call = (id: string, name: string, args: Record<string, unknown>) => ({
+    id,
+    name,
+    arguments: args,
+  });
+  const exchange = (reply: string, calls: ReturnType<typeof call>[], result = ""): Message[] => [
+    { id: 1, ...at, role: "user", text: "q" },
+    { id: 2, ...at, role: "assistant", text: "", toolCalls: calls, stopped: false },
+    ...calls.map((c, i) => ({
+      id: 3 + i,
+      ...at,
+      role: "tool" as const,
+      callId: c.id,
+      name: c.name,
+      result,
+    })),
+    { id: 9, ...at, role: "assistant", text: reply, toolCalls: [], stopped: false },
+  ];
+  const sources = (messages: Message[]) => {
+    const block = threadBlocks(messages).find((b) => b.kind === "reply");
+    if (block?.kind !== "reply") throw new Error("no reply");
+    return replySources(block.text, block.read, tree);
+  };
+
+  it("cites notes whose secrets it shows and notes it read and names, in reply order", () => {
+    const messages = exchange(
+      "Redis is up. The panel password is [n12.0]; JWT [n20.1].",
+      [call("a", "search", { query: "redis" })],
+      "2 results:\n- note 13: Redis in Acme / Infra\n- note 12: Hosting panel in Acme / Infra",
+    );
+    expect(sources(messages)).toEqual([
+      { kind: "item", id: 13 },
+      { kind: "item", id: 12 },
+      { kind: "item", id: 20 },
+    ]);
+  });
+
+  it("names only what the model read, and falls back to the one note it opened", () => {
+    expect(
+      sources(exchange("Nothing about Redis here.", [call("a", "list_projects", {})])),
+    ).toEqual([]);
+    expect(sources(exchange("It runs nightly.", [call("a", "get_note", { id: "20" })]))).toEqual([
+      { kind: "item", id: 20 },
+    ]);
+  });
+
+  it("cites a project it opened and names, unless one of its notes is cited", () => {
+    expect(
+      sources(exchange("Muhit has no todos.", [call("a", "get_project", { project: "muhit" })])),
+    ).toEqual([{ kind: "project", id: 2 }]);
+    const both = exchange("Muhit's .env (staging) has it.", [
+      call("a", "get_project", { project: "2" }),
+      call("b", "get_note", { id: 20 }),
+    ]);
+    expect(sources(both)).toEqual([{ kind: "item", id: 20 }]);
   });
 });

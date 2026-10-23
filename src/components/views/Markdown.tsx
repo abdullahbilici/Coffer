@@ -15,6 +15,8 @@ export type MarkdownChips = {
   onToggleSecret: (index: number) => void;
   onCopySecret: (index: number) => void;
   onCopyText: (text: string) => void;
+  /** The secret chip under the pointer, or `null` once it leaves. */
+  onHoverSecret?: (index: number | null) => void;
 };
 
 // Chip state goes through context so `components` stays stable; recreating it would remount
@@ -36,7 +38,7 @@ function Copyable({ children }: { children?: ReactNode }) {
 
 function Secret({ index }: { index: number }) {
   const chips = useChips();
-  return (
+  const chip = (
     <SecretChip
       className={styles.chip}
       value={chips.secrets?.[index] ?? null}
@@ -44,6 +46,13 @@ function Secret({ index }: { index: number }) {
       onToggle={() => chips.onToggleSecret(index)}
       onCopy={() => chips.onCopySecret(index)}
     />
+  );
+  const { onHoverSecret } = chips;
+  if (!onHoverSecret) return chip;
+  return (
+    <span onMouseEnter={() => onHoverSecret(index)} onMouseLeave={() => onHoverSecret(null)}>
+      {chip}
+    </span>
   );
 }
 

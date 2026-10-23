@@ -15,12 +15,28 @@ pub trait Model {
     fn chat(&self, request: &Request, on_text: &mut dyn FnMut(&str)) -> AppResult<Reply>;
 }
 
+/// What a tool returned: the text the model reads, and the text stored in history. They differ
+/// only when the model reads decrypted values, which history keeps as handles.
+pub struct ToolResult {
+    pub model: String,
+    pub stored: String,
+}
+
+impl From<String> for ToolResult {
+    fn from(text: String) -> Self {
+        Self {
+            model: text.clone(),
+            stored: text,
+        }
+    }
+}
+
 pub struct Hooks<'a> {
     /// The visible text of the reply being written, so far.
     pub on_text: &'a mut dyn FnMut(&str),
     /// Stores a finished turn; the frontend learns about it from here.
     pub save: &'a mut dyn FnMut(&Turn) -> AppResult<()>,
-    pub run_tool: &'a mut dyn FnMut(&ToolCall) -> AppResult<String>,
+    pub run_tool: &'a mut dyn FnMut(&ToolCall) -> AppResult<ToolResult>,
     pub cancelled: &'a dyn Fn() -> bool,
 }
 
@@ -84,13 +100,17 @@ pub fn respond(
             if (hooks.cancelled)() {
                 return stop(history, hooks.save);
             }
-            let turn = Turn::Tool {
-                result: (hooks.run_tool)(&call)?,
+            let result = (hooks.run_tool)(&call)?;
+            (hooks.save)(&Turn::Tool {
+                call_id: call.id.clone(),
+                name: call.name.clone(),
+                result: result.stored,
+            })?;
+            history.push(Turn::Tool {
                 call_id: call.id,
                 name: call.name,
-            };
-            (hooks.save)(&turn)?;
-            history.push(turn);
+                result: result.model,
+            });
         }
     }
     Ok(())
@@ -169,7 +189,7 @@ mod tests {
                 },
                 run_tool: &mut |call| {
                     tools_run.set(tools_run.get() + 1);
-                    Ok(format!("{} found note 12", call.name))
+                    Ok(format!("{} found note 12", call.name).into())
                 },
                 cancelled: &cancelled,
             },

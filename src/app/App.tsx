@@ -230,6 +230,7 @@ export function App() {
             session={session}
             run={run}
             onCopy={copy}
+            actions={actions}
             composerRef={composerRef}
           />
         );
