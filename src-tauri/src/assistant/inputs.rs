@@ -240,6 +240,17 @@ fn unwrap(word: &str) -> (&str, &str, &str) {
     let trimmed = inner.trim_end_matches(',');
     close_len += inner.len() - trimmed.len();
     inner = trimmed;
+    // A bracket or quote whose partner isn't in the word belongs to the sentence: "(new client)".
+    for (open, close) in [('(', ')'), ('"', '"'), ('[', ']'), ('<', '>')] {
+        if inner.len() > 1 && inner.starts_with(open) && !inner[1..].contains(close) {
+            inner = &inner[1..];
+            open_len += 1;
+        }
+        if inner.len() > 1 && inner.ends_with(close) && !inner[..inner.len() - 1].contains(open) {
+            inner = &inner[..inner.len() - 1];
+            close_len += 1;
+        }
+    }
     let end = word.len() - close_len.min(word.len());
     (&word[..open_len], inner, &word[end.max(open_len)..])
 }
@@ -360,6 +371,7 @@ mod tests {
             "mark the Renew SSL todo done",
             "faturayı ayın 5'inde kesiyorlar, Ali'de de var",
             "move side-project notes into Infra.",
+            "## Client Name (yeni müşteri)",
             "PIN 4242",
         ] {
             assert_eq!(take(text).0, text, "{text}");

@@ -13,6 +13,7 @@
 
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
+    io::Write as _,
     sync::{Arc, Mutex, atomic::AtomicBool},
     time::Instant,
 };
@@ -22,7 +23,9 @@ use serde_json::{Value, json};
 use zeroize::Zeroizing;
 
 use super::{
-    Turn, draft, fields, import_prompt,
+    Reply, Request, Turn,
+    agent::Model,
+    draft, fields, import_prompt,
     ollama::Ollama,
     reply::{self, Io, Prompts},
     system_prompt,
@@ -38,6 +41,7 @@ use crate::{
         projects,
         todos::{self, TodoRecord},
     },
+    error::AppResult,
 };
 
 const TODAY: &str = "2026-10-23";
@@ -829,7 +833,33 @@ struct Outcome {
     error: Option<String>,
 }
 
-fn run(model: &Ollama, db: &Mutex<Connection>, history: Vec<Turn>, apply: bool) -> Outcome {
+/// Writes every model reply to the trace file, so a bad score can be read back.
+struct Traced<'a> {
+    model: &'a Ollama,
+    trace: &'a Mutex<std::fs::File>,
+}
+
+impl Model for Traced<'_> {
+    fn chat(&self, request: &Request, on_text: &mut dyn FnMut(&str)) -> AppResult<Reply> {
+        let started = Instant::now();
+        let reply = self.model.chat(request, on_text);
+        if let Ok(mut file) = self.trace.lock() {
+            let _ = match &reply {
+                Ok(r) => writeln!(
+                    file,
+                    "--- {:.0}s text: {}\ncalls: {}",
+                    started.elapsed().as_secs_f64(),
+                    r.text,
+                    serde_json::to_string(&r.tool_calls).unwrap_or_default()
+                ),
+                Err(e) => writeln!(file, "--- error: {e}"),
+            };
+        }
+        reply
+    }
+}
+
+fn run(model: &Traced, db: &Mutex<Connection>, history: Vec<Turn>, apply: bool) -> Outcome {
     let started = Instant::now();
     let chat = system_prompt("Friday, 23 October 2026", "");
     let import = import_prompt("");
@@ -896,7 +926,7 @@ fn tool_errors(saved: &[Turn]) -> usize {
 }
 
 /// Imports a dump of `n` projects into an empty vault.
-fn import_task(model: &Ollama, n: usize, seed_value: u64) -> Value {
+fn import_task(model: &Traced, n: usize, seed_value: u64) -> Value {
     let mut g = Gen {
         r: Rng(seed_value),
         used: HashSet::new(),
@@ -1013,7 +1043,7 @@ fn paste(text: &str) -> Turn {
 
 /// A new dump against a full vault: new notes, new fields, changed values, a new project and
 /// values stored already.
-fn add_task(model: &Ollama) -> Value {
+fn add_task(model: &Traced) -> Value {
     let mut g = Gen {
         r: Rng(0x05ee_dadd),
         used: HashSet::new(),
@@ -1215,7 +1245,7 @@ fn add_task(model: &Ollama) -> Value {
 }
 
 /// Natural-language commands, one conversation each, scored on the draft they produce.
-fn edit_task(model: &Ollama) -> Value {
+fn edit_task(model: &Traced) -> Value {
     let mut g = Gen {
         r: Rng(0xed17),
         used: HashSet::new(),
@@ -1472,14 +1502,23 @@ fn eval() {
     let url = std::env::var("COFFER_EVAL_URL").unwrap_or_else(|_| "http://localhost:11434".into());
     let tasks =
         std::env::var("COFFER_EVAL_TASKS").unwrap_or_else(|_| "edit,import_S,add,import_M".into());
-    let model = Ollama::new(&url, &model_name, None, Arc::new(AtomicBool::new(false))).unwrap();
+    let ollama = Ollama::new(&url, &model_name, None, Arc::new(AtomicBool::new(false))).unwrap();
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("target/eval");
     std::fs::create_dir_all(&dir).unwrap();
-    let path = dir.join(format!("{}.json", model_name.replace([':', '/'], "_")));
+    let tag = model_name.replace([':', '/'], "_");
+    let path = dir.join(format!("{tag}.json"));
+    let trace = Mutex::new(std::fs::File::create(dir.join(format!("{tag}.trace.txt"))).unwrap());
+    let model = Traced {
+        model: &ollama,
+        trace: &trace,
+    };
     let mut report =
         serde_json::from_str::<Value>(&std::fs::read_to_string(&path).unwrap_or_default())
             .unwrap_or_else(|_| json!({}));
     for task in tasks.split(',').map(str::trim) {
+        if let Ok(mut file) = trace.lock() {
+            let _ = writeln!(file, "===== {task}");
+        }
         let result = match task {
             "import_S" => import_task(&model, 5, 0x5eed_0005),
             "import_M" => import_task(&model, 12, 0x5eed_0012),

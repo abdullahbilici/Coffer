@@ -19,7 +19,7 @@ use ureq::{
 };
 use zeroize::Zeroizing;
 
-use super::{NUM_CTX, Reply, Request, ToolCall, Turn, agent::Model, visible_text};
+use super::{NUM_CTX, NUM_PREDICT, Reply, Request, ToolCall, Turn, agent::Model, visible_text};
 use crate::error::{AppError, AppResult};
 
 /// How often a waiting reply checks for cancel.
@@ -127,7 +127,7 @@ impl Ollama {
             "messages": messages,
             "stream": true,
             "think": false,
-            "options": { "num_ctx": NUM_CTX },
+            "options": { "num_ctx": NUM_CTX, "num_predict": NUM_PREDICT },
         });
         if let Some(tools) = request.tools {
             body["tools"] = tools.clone();

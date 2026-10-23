@@ -1320,6 +1320,13 @@ impl Writer<'_, '_> {
             Val::Secret(_) => Some(true),
             _ => args.get("secret").and_then(Value::as_bool),
         };
+        if let Val::Input(n) = value
+            && self.draft.ops.iter().any(|op| op_uses_input(op, n))
+        {
+            return Err(bad(format!(
+                "[u{n}] is used in this draft already; each value goes to one place"
+            )));
+        }
         if let Some(text) = resolve_known(self.ctx.inputs, &value)
             && fields::value_of(current) == Some(text.as_str())
         {

@@ -98,6 +98,10 @@ pub struct Reply {
 /// Context the model gets with every request (Ollama truncates silently past it).
 pub const NUM_CTX: u32 = 16_384;
 
+/// Longest answer per model call, in tokens. A local model can fall into a loop and write
+/// until stopped; this ends such a call after a couple of minutes instead.
+pub const NUM_PREDICT: u32 = 4_096;
+
 /// Room for earlier turns, in characters (roughly a third of `NUM_CTX` tokens each way).
 const HISTORY_BUDGET: usize = 36_000;
 
