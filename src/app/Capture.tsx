@@ -61,8 +61,8 @@ export function Capture() {
   const { show: showToast } = toast;
   const copy: Copy = useCallback(
     async (value, secret = false) => {
-      await navigator.clipboard.writeText(value);
-      if (secret) await api.clearClipboardLater();
+      if (secret) await api.copySecret(value);
+      else await navigator.clipboard.writeText(value);
       showToast("Copied", "success");
     },
     [showToast],

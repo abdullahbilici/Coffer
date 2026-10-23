@@ -5,6 +5,7 @@ import type { Session } from "../../hooks/useSession";
 import { api, type Settings } from "../../lib/api";
 import { Segmented } from "../ui/Segmented";
 import { Select } from "../ui/Select";
+import { Switch } from "../ui/Switch";
 import { SettingRow } from "./SettingRow";
 import { ShortcutField } from "./ShortcutField";
 
@@ -52,6 +53,12 @@ export function GeneralSection({ settings, onChange, session, run, ...props }: P
       onChange({ ...settings, clipboardClearSecs: secs });
     });
 
+  const setClipboardConcealed = (on: boolean) =>
+    run(async () => {
+      await session.withUnlock(() => api.setClipboardConcealed(on));
+      onChange({ ...settings, clipboardConcealed: on });
+    });
+
   // The backend registers it first and keeps the old one if it can't.
   const setCaptureShortcut = (shortcut: string | null) =>
     run(async () => {
@@ -75,6 +82,14 @@ export function GeneralSection({ settings, onChange, session, run, ...props }: P
           value={settings.clipboardClearSecs}
           options={CLIPBOARD_OPTIONS}
           onChange={setClipboardClear}
+        />
+      </SettingRow>
+      <SettingRow label="Hide secrets from clipboard history">
+        <Switch
+          label="Hide secrets from clipboard history"
+          labelHidden
+          checked={settings.clipboardConcealed}
+          onChange={(on) => void setClipboardConcealed(on)}
         />
       </SettingRow>
       <SettingRow label="Quick capture">
