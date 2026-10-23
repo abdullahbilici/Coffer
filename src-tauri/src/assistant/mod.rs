@@ -3,6 +3,8 @@
 
 pub mod agent;
 pub mod draft;
+#[cfg(test)]
+mod eval;
 pub mod fields;
 pub mod handles;
 pub mod inputs;
@@ -133,6 +135,8 @@ passed as written.
 - Look up ids first (search, get_project, get_note, list_todos, list_payments) and change what \
 exists: add a field to the right note rather than making a new one, and update a field that \
 already has a value. Use the field's label as it is in the note.
+- Requests name things loosely (lowercase, partial, Turkish words such as canlı for prod and \
+test for staging): take the closest match and name it in your answer.
 - Mark a field secret for passwords, keys, tokens, PINs and recovery codes; usernames, emails, \
 hosts, public URLs and ids are not secret.
 - If a tool answers with an error, fix the call and try again.

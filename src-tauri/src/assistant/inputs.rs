@@ -16,6 +16,8 @@ pub struct Inputs {
     values: Vec<String>,
     /// What the model saw of each message, for checking short values it repeats verbatim.
     shown: Vec<String>,
+    /// Writes values as a short masked form instead of handles (`masked`).
+    masking: bool,
 }
 
 /// Values the model sees as they are; anything shorter is rarely worth hiding.
@@ -112,6 +114,10 @@ impl Inputs {
     }
 
     fn push(&mut self, value: &str, out: &mut String) {
+        if self.masking {
+            out.push_str(&short(value));
+            return;
+        }
         let n = match self.values.iter().position(|v| v == value) {
             Some(i) => i + 1,
             None => {
@@ -141,6 +147,35 @@ impl Inputs {
                         && !after.is_some_and(char::is_alphanumeric)
                 })
             })
+    }
+}
+
+/// `text` with its values masked, e.g. for a conversation title: "add sk_test_… to acme".
+pub fn masked(text: &str) -> String {
+    let mut inputs = Inputs {
+        masking: true,
+        ..Inputs::default()
+    };
+    inputs.take(text)
+}
+
+/// A value's masked form: a known key prefix, a URL's host or an email's domain, then "…".
+fn short(value: &str) -> String {
+    if let Some(rest) = value
+        .strip_prefix("https://")
+        .or_else(|| value.strip_prefix("http://"))
+    {
+        let host = &rest[..rest.find(['/', '?', '#']).unwrap_or(rest.len())];
+        return host.rsplit('@').next().unwrap_or(host).to_string();
+    }
+    if is_email(value)
+        && let Some((_, domain)) = value.split_once('@')
+    {
+        return format!("…@{domain}");
+    }
+    match PREFIXES.iter().find(|p| value.starts_with(*p)) {
+        Some(prefix) => format!("{prefix}…"),
+        None => "…".to_string(),
     }
 }
 
@@ -355,6 +390,14 @@ mod tests {
         assert!(inputs.shown_verbatim("again"));
         assert!(!inputs.shown_verbatim("abc123def"));
         assert!(!inputs.shown_verbatim("gai"));
+    }
+
+    #[test]
+    fn masks_values_for_titles() {
+        assert_eq!(
+            masked("add sk_test_51HxYz9KqLmN0pQrStUv and pass `hunter2` from https://x.example/a"),
+            "add sk_test_… and pass … from x.example"
+        );
     }
 
     #[test]

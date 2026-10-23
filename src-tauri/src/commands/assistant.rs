@@ -25,7 +25,7 @@ use crate::{
     assistant::{
         DraftStatus, Turn, draft,
         handles::{self, Handle},
-        import_prompt,
+        import_prompt, inputs,
         ollama::{self, Ollama},
         reply::{self, Io, Prompts},
         system_prompt, title_from,
@@ -280,8 +280,10 @@ pub fn send_message(
             }
             None => {
                 let title = match &paste {
-                    Some(paste) if text.is_empty() => format!("Import: {}", title_from(paste)),
-                    _ => title_from(&text),
+                    Some(paste) if text.is_empty() => {
+                        format!("Import: {}", title_from(&inputs::masked(paste)))
+                    }
+                    _ => title_from(&inputs::masked(&text)),
                 };
                 let id = conversations::insert(&conn, &seal_with(&key, &title)?, now)?;
                 (id, title, now)
