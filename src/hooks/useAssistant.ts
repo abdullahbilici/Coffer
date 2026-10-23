@@ -121,7 +121,14 @@ export function useAssistant(session: Session, run: Run, reload: () => Promise<v
         );
         setThread((t) =>
           t.id === id
-            ? { ...t, messages: [...t.messages, message], streaming: "", phase: null }
+            ? {
+                ...t,
+                messages: [...t.messages, message],
+                streaming: "",
+                phase: null,
+                // The stored draft takes over from the one being filled in.
+                progress: message.role === "draft" ? null : t.progress,
+              }
             : t,
         );
       } else {
