@@ -605,6 +605,32 @@ impl Gen {
         out.push(personal);
         out
     }
+
+    /// Gives four accounts one email and three of them one password, as real dumps do; returns
+    /// the shared values. A draft must keep them in every account.
+    fn share(&mut self, vault: &mut [TrueProject]) -> Vec<String> {
+        let email = self.value("email");
+        let password = self.value("pw");
+        let mut notes: Vec<&mut TrueNote> = vault.iter_mut().flat_map(|p| &mut p.notes).collect();
+        self.r.shuffle(&mut notes);
+        for (i, note) in notes.into_iter().take(4).enumerate() {
+            let mut shared = vec![("email", &email, false)];
+            if i < 3 {
+                shared.push(("password", &password, true));
+            }
+            for (label, value, secret) in shared {
+                match note.fields.iter_mut().find(|f| f.label == label) {
+                    Some(f) => f.value = value.clone(),
+                    None => note.fields.push(TrueField {
+                        label: label.to_string(),
+                        value: value.clone(),
+                        secret: Some(secret),
+                    }),
+                }
+            }
+        }
+        vec![email, password]
+    }
 }
 
 // --- dumps -----------------------------------------------------------------------------
@@ -942,14 +968,15 @@ fn import_task(model: &Traced, n: usize, seed_value: u64) -> Value {
         used: HashSet::new(),
         next_note: 0,
     };
-    let vault = g.vault(n);
+    let mut vault = g.vault(n);
+    let shared = g.share(&mut vault);
     let dump = render_dump(&mut g.r, &vault);
     let db = Mutex::new(open_in_memory());
     let out = run(model, &db, vec![paste(&dump)], true);
     let stored = stored_fields(&db.lock().unwrap());
 
-    // Truth: value -> (project, note key, secret).
-    let truth: Vec<(&TrueProject, &TrueNote, &TrueField)> = vault
+    // Truth: value -> (project, note key, secret). Shared values are scored on their own.
+    let all: Vec<(&TrueProject, &TrueNote, &TrueField)> = vault
         .iter()
         .flat_map(|p| {
             p.notes
@@ -957,6 +984,24 @@ fn import_task(model: &Traced, n: usize, seed_value: u64) -> Value {
                 .flat_map(move |n| n.fields.iter().map(move |f| (p, n, f)))
         })
         .collect();
+    let (shared_truth, truth): (Vec<_>, Vec<_>) = all
+        .into_iter()
+        .partition(|(_, _, f)| shared.contains(&f.value));
+    // Every account holding a shared value should end up with it.
+    let shared_kept: usize = shared
+        .iter()
+        .map(|v| {
+            let uses = shared_truth
+                .iter()
+                .filter(|(_, _, f)| &f.value == v)
+                .count();
+            let notes: HashSet<i64> = stored
+                .get(v)
+                .map(|s| s.iter().map(|s| s.note).collect())
+                .unwrap_or_default();
+            uses.min(notes.len())
+        })
+        .sum();
     let found: Vec<_> = truth
         .iter()
         .filter_map(|(p, n, f)| stored.get(&f.value).map(|s| (p, n, f, &s[0])))
@@ -1033,6 +1078,7 @@ fn import_task(model: &Traced, n: usize, seed_value: u64) -> Value {
         "error": out.error,
         "tool_errors": tool_errors(&out.saved),
         "values_captured": pct(found.len(), truth.len()),
+        "shared_values_kept": pct(shared_kept, shared_truth.len()),
         "values_not_in_dump": not_in_dump,
         "secret_flags_ok": pct(judged - leaks - over, judged),
         "secrets_stored_plain": leaks,
@@ -1757,12 +1803,21 @@ fn dumps_are_deterministic_and_hold_every_value() {
             used: HashSet::new(),
             next_note: 0,
         };
-        let vault = g.vault(5);
+        let mut vault = g.vault(5);
+        let shared = g.share(&mut vault);
         let dump = render_dump(&mut g.r, &vault);
-        (vault, dump)
+        (vault, dump, shared)
     };
-    let (vault, dump) = make();
+    let (vault, dump, shared) = make();
     assert_eq!(dump, make().1);
+    for (v, accounts) in shared.iter().zip([4, 3]) {
+        let holding = vault
+            .iter()
+            .flat_map(|p| &p.notes)
+            .filter(|n| n.fields.iter().any(|f| &f.value == v))
+            .count();
+        assert_eq!(holding, accounts, "{v}");
+    }
     for p in &vault {
         for n in &p.notes {
             for f in &n.fields {

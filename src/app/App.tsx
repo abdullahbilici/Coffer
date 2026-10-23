@@ -62,8 +62,8 @@ export function App() {
 
   const copy: Copy = useCallback(
     async (text, secret = false) => {
-      await navigator.clipboard.writeText(text);
-      if (secret) await api.clearClipboardLater();
+      if (secret) await api.copySecret(text);
+      else await navigator.clipboard.writeText(text);
       showToast("Copied to clipboard", "success");
     },
     [showToast],

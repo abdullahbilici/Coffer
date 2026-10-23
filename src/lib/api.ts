@@ -46,6 +46,8 @@ export type Settings = {
   unlockWindowSecs: number | null;
   /** `null`: never. */
   clipboardClearSecs: number | null;
+  /** Copied secrets are kept out of clipboard history. */
+  clipboardConcealed: boolean;
   backup: BackupSettings;
   assistant: AssistantSettings;
   /** `coffer --mcp` may answer an MCP client. */
@@ -250,7 +252,9 @@ export const api = {
   getSettings: () => invoke<Settings>("get_settings"),
   setUnlockWindow: (secs: number | null) => invoke<SessionInfo>("set_unlock_window", { secs }),
   setClipboardClear: (secs: number | null) => invoke<void>("set_clipboard_clear", { secs }),
-  clearClipboardLater: () => invoke<void>("clear_clipboard_later"),
+  setClipboardConcealed: (on: boolean) => invoke<void>("set_clipboard_concealed", { on }),
+  /** Copies a secret (concealed and cleared later, as the settings say). */
+  copySecret: (text: string) => invoke<void>("copy_secret", { text }),
   setMcpAccess: (on: boolean) => invoke<void>("set_mcp_access", { on }),
   /** The `claude mcp add` command for the running app. */
   mcpCommand: () => invoke<string>("mcp_command"),

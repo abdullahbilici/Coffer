@@ -200,8 +200,9 @@ folders a vault project already has; otherwise leave folder empty.
 - Secret: passwords, API keys, tokens, secret keys, PINs, codes, webhook URLs with keys. Not \
 secret: usernames, emails, URLs, hosts, IPs, regions, public ids.
 - When a note the vault has already gets a new value, call add_field on it; when the text says \
-a stored value changed, call update_field with the field's label as it is in the note. Values \
-the vault has already are skipped for you.
+a stored value changed, call update_field with the field's label as it is in the note. Give \
+every account all of its values, even an email or password another account shares; a value \
+the note has already is skipped for you.
 - Lines without values (todos, comments) are not imported."
         .to_string();
     let context = context.trim();

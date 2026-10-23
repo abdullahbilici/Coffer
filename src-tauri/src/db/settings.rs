@@ -11,6 +11,7 @@ use crate::error::{AppError, AppResult};
 
 const UNLOCK_WINDOW: &str = "unlock_window_secs";
 const CLIPBOARD_CLEAR: &str = "clipboard_clear_secs";
+const CLIPBOARD_CONCEALED: &str = "clipboard_concealed";
 const BACKUP_CONFIGURED: &str = "backup_configured";
 const BACKUP_AUTO: &str = "backup_auto";
 const BACKUP_DIR: &str = "backup_dir";
@@ -42,6 +43,8 @@ pub struct Settings {
     pub unlock_window_secs: Option<u64>,
     /// `None`: copied secrets stay on the clipboard.
     pub clipboard_clear_secs: Option<u64>,
+    /// Copied secrets carry the markers that keep them out of clipboard history. On by default.
+    pub clipboard_concealed: bool,
     pub backup: BackupSettings,
     pub assistant: AssistantSettings,
     /// `coffer --mcp` may answer an MCP client. Off by default.
@@ -146,6 +149,7 @@ pub fn load(conn: &Connection) -> AppResult<Settings> {
     Ok(Settings {
         unlock_window_secs: get_secs(conn, UNLOCK_WINDOW, DEFAULT_UNLOCK_WINDOW)?,
         clipboard_clear_secs: get_secs(conn, CLIPBOARD_CLEAR, DEFAULT_CLIPBOARD_CLEAR)?,
+        clipboard_concealed: get_flag(conn, CLIPBOARD_CONCEALED, true)?,
         backup: BackupSettings {
             configured: get_flag(conn, BACKUP_CONFIGURED, false)?,
             auto: get_flag(conn, BACKUP_AUTO, true)?,
@@ -171,6 +175,10 @@ pub fn set_unlock_window(conn: &Connection, secs: Option<u64>) -> AppResult<()> 
 
 pub fn set_clipboard_clear(conn: &Connection, secs: Option<u64>) -> AppResult<()> {
     set_secs(conn, CLIPBOARD_CLEAR, secs, CLIPBOARD_CLEAR_CHOICES)
+}
+
+pub fn set_clipboard_concealed(conn: &Connection, on: bool) -> AppResult<()> {
+    set_flag(conn, CLIPBOARD_CONCEALED, on)
 }
 
 pub fn set_backup_configured(conn: &Connection) -> AppResult<()> {
@@ -238,6 +246,7 @@ mod tests {
         let settings = load(&conn).unwrap();
         assert_eq!(settings.unlock_window_secs, Some(DEFAULT_UNLOCK_WINDOW));
         assert_eq!(settings.clipboard_clear_secs, Some(DEFAULT_CLIPBOARD_CLEAR));
+        assert!(settings.clipboard_concealed);
         assert!(!settings.backup.configured);
         assert!(settings.backup.auto);
         assert_eq!(settings.backup.auto_dir(), None);
@@ -273,6 +282,31 @@ mod tests {
         let settings = load(&conn).unwrap();
         assert_eq!(settings.unlock_window(), None);
         assert_eq!(settings.clipboard_clear_secs, Some(60));
+    }
+
+    #[test]
+    fn clipboard_concealed_can_be_switched_off() {
+        let conn = open_in_memory();
+        set_clipboard_concealed(&conn, false).unwrap();
+        assert!(!load(&conn).unwrap().clipboard_concealed);
+        set_clipboard_concealed(&conn, true).unwrap();
+        assert!(load(&conn).unwrap().clipboard_concealed);
+    }
+
+    /// A vault from before the setting keeps its other settings and gets the safe default.
+    #[test]
+    fn legacy_settings_default_to_concealed() {
+        let conn = open_in_memory();
+        conn.execute_batch(
+            "INSERT INTO settings (key, value) VALUES
+                 ('clipboard_clear_secs', 'off'), ('unlock_window_secs', '60');",
+        )
+        .unwrap();
+
+        let settings = load(&conn).unwrap();
+        assert!(settings.clipboard_concealed);
+        assert_eq!(settings.clipboard_clear_secs, None);
+        assert_eq!(settings.unlock_window_secs, Some(60));
     }
 
     #[test]

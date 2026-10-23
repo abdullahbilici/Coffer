@@ -33,7 +33,7 @@ const CHUNK_CHARS: usize = 1_800;
 
 pub struct Io<'a> {
     pub db: &'a dyn Fn() -> MutexGuard<'a, Connection>,
-    /// Lets the model read secrets and a draft skip the ones the vault holds already; `None`
+    /// Lets the model read secrets and a draft skip the ones a note holds already; `None`
     /// keeps every secret a handle.
     pub key: Option<VaultKey>,
     /// Whether the unlock window is still open; once it closes, tools show handles only.
