@@ -13,3 +13,14 @@
   font-size: var(--text-xs);
   font-weight: 500;
 }
+
+.plain {
+  gap: 2px;
+  height: auto;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  font-size: var(--text-md);
+  font-weight: 400;
+}

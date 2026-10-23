@@ -15,18 +15,18 @@ type Props = {
 
 /**
  * A global shortcut. Click, then press the keys; Esc or clicking away keeps the old one,
- * Delete turns it off, and so does the button next to it.
+ * Delete turns it off, and so does the button inside the field.
  */
 export function ShortcutField({ label, value, onChange }: Props) {
   const [recording, setRecording] = useState(false);
   const parts = value === null ? null : shortcutParts(value);
 
   return (
-    <>
+    <div className={cx(styles.field, recording && styles.recording)}>
       <button
         type="button"
         aria-label={label}
-        className={cx(styles.field, recording && styles.recording)}
+        className={styles.keys}
         onClick={() => setRecording(true)}
         onBlur={() => setRecording(false)}
         onKeyDown={(e) => {
@@ -50,14 +50,20 @@ export function ShortcutField({ label, value, onChange }: Props) {
         {recording ? (
           <span className={styles.placeholder}>Type shortcut</span>
         ) : parts ? (
-          <Kbd letter={parts.key} modifiers={parts.modifiers} />
+          <Kbd letter={parts.key} modifiers={parts.modifiers} variant="plain" />
         ) : (
           <span className={styles.placeholder}>Off</span>
         )}
       </button>
-      {value !== null && (
-        <IconButton icon={X} label="Turn off" size="sm" onClick={() => onChange(null)} />
+      {value !== null && !recording && (
+        <IconButton
+          icon={X}
+          label="Turn off"
+          size="sm"
+          className={styles.clear}
+          onClick={() => onChange(null)}
+        />
       )}
-    </>
+    </div>
   );
 }
