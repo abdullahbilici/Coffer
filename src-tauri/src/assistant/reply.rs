@@ -44,9 +44,18 @@ pub struct Io<'a> {
     pub on_text: &'a mut dyn FnMut(&str),
     /// Stores a finished turn.
     pub save: &'a mut dyn FnMut(&Turn) -> AppResult<()>,
+    /// An import about to read its next part, with the draft so far.
+    pub on_progress: &'a mut dyn FnMut(Progress),
     pub cancelled: &'a dyn Fn() -> bool,
     /// Runs before every tool, e.g. to check the app is still entered.
     pub check: &'a dyn Fn() -> AppResult<()>,
+}
+
+/// Where an import is: `part` of `parts` starts, after the parts before it drafted `groups`.
+pub struct Progress {
+    pub part: usize,
+    pub parts: usize,
+    pub groups: Vec<draft::Group>,
 }
 
 pub struct Prompts<'a> {
@@ -80,6 +89,7 @@ pub fn reply(model: &dyn Model, prompts: &Prompts, history: &[Turn], io: Io) -> 
         today,
         on_text,
         save,
+        on_progress,
         cancelled,
         check,
     } = io;
@@ -185,6 +195,23 @@ pub fn reply(model: &dyn Model, prompts: &Prompts, history: &[Turn], io: Io) -> 
                 };
                 draft::outline(&ctx, ops, chunk)
             },
+            &mut |part, parts, ops: &[draft::Op]| {
+                let conn = db();
+                let ctx = Ctx {
+                    conn: &conn,
+                    today,
+                    inputs: &inputs,
+                    stored: &stored,
+                };
+                let groups = draft::view(&ctx, ops)?;
+                drop(conn);
+                on_progress(Progress {
+                    part,
+                    parts,
+                    groups,
+                });
+                Ok(())
+            },
             &mut draft,
             &mut run_tool,
             cancelled,
@@ -239,6 +266,8 @@ fn claims_a_draft(turns: &[Turn]) -> bool {
 }
 
 type RunTool<'a> = dyn FnMut(&mut Draft, &str, &Value) -> AppResult<ToolResult> + 'a;
+/// Told `part` of `parts` starts, with the draft's ops so far.
+type OnPart<'a> = dyn FnMut(usize, usize, &[draft::Op]) -> AppResult<()> + 'a;
 
 #[allow(clippy::too_many_arguments)]
 fn import(
@@ -248,6 +277,7 @@ fn import(
     paste: &str,
     save: &mut dyn FnMut(&Turn) -> AppResult<()>,
     outline: &mut dyn FnMut(&str, &[draft::Op]) -> AppResult<String>,
+    progress: &mut OnPart,
     draft: &mut Draft,
     run_tool: &mut RunTool,
     cancelled: &dyn Fn() -> bool,
@@ -256,7 +286,9 @@ fn import(
     let specs = draft::import_specs();
     let instruction = instruction.trim();
     let mut any = false;
-    for (n, range) in chunks(&lines).into_iter().enumerate() {
+    let chunks = chunks(&lines);
+    let parts = chunks.len();
+    for (n, range) in chunks.into_iter().enumerate() {
         if cancelled() {
             return save(&Turn::Assistant {
                 text: String::new(),
@@ -264,6 +296,7 @@ fn import(
                 stopped: true,
             });
         }
+        progress(n + 1, parts, &draft.ops)?;
         let numbered = blocks(&lines, range.clone());
         let mut prompt = String::new();
         if !instruction.is_empty() {
@@ -517,6 +550,7 @@ mod tests {
                     saved.borrow_mut().push(turn.clone());
                     Ok(())
                 },
+                on_progress: &mut |_| {},
                 cancelled: &|| false,
                 check: &|| Ok(()),
             },
@@ -580,6 +614,7 @@ mod tests {
                     saved.borrow_mut().push(turn.clone());
                     Ok(())
                 },
+                on_progress: &mut |_| {},
                 cancelled: &|| false,
                 check: &|| Ok(()),
             },
@@ -626,6 +661,7 @@ mod tests {
             }
         }
         let saved = RefCell::new(Vec::new());
+        let progress = RefCell::new(Vec::new());
         let lock = || db.lock().unwrap();
         reply(
             &Each(&n),
@@ -644,6 +680,11 @@ mod tests {
                     saved.borrow_mut().push(turn.clone());
                     Ok(())
                 },
+                on_progress: &mut |p| {
+                    progress
+                        .borrow_mut()
+                        .push((p.part, p.parts, p.groups.len()))
+                },
                 cancelled: &|| false,
                 check: &|| Ok(()),
             },
@@ -651,6 +692,13 @@ mod tests {
         .unwrap();
         let chunks = n.load(Ordering::Relaxed);
         assert!(chunks > 1);
+        // Every part is announced with the draft so far: nothing before the first.
+        let progress = progress.borrow();
+        let parts: Vec<usize> = progress.iter().map(|p| p.0).collect();
+        assert_eq!(parts, (1..=chunks).collect::<Vec<_>>());
+        assert!(progress.iter().all(|p| p.1 == chunks));
+        assert_eq!(progress[0].2, 0);
+        assert_eq!(progress[chunks - 1].2, 1);
         let saved = saved.borrow();
         let Some(Turn::Draft { ops, groups, .. }) = saved.last() else {
             panic!("no draft");

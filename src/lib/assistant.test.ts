@@ -207,3 +207,24 @@ describe("replyStatus", () => {
     expect(replyStatus([user, calls("search")], "loading", "")).toBe("Loading model");
   });
 });
+
+describe("threadBlocks while an import runs", () => {
+  const user: Message = { id: 4, createdAt: 0, role: "user", text: "", paste: "dump" };
+  const groups = [{ project: "Acme", new: false, entries: [] }];
+
+  it("ends with the draft so far, keyed like the stored draft that replaces it", () => {
+    const building = threadBlocks([user], groups).at(-1);
+    expect(building).toMatchObject({ kind: "draft", building: true, groups });
+    const draft: Message = { id: 9, createdAt: 0, role: "draft", groups, status: "pending" };
+    const stored = threadBlocks([user, draft]).at(-1);
+    expect(stored).toMatchObject({ kind: "draft", building: false, id: 9 });
+    expect(stored?.key).toBe(building?.key);
+  });
+
+  it("shows the part instead of the phase", () => {
+    expect(replyStatus([user], "reading", "", { part: 3, parts: 9, groups })).toBe("Part 3 of 9");
+    expect(replyStatus([user], "loading", "", { part: 1, parts: 9, groups: [] })).toBe(
+      "Loading model",
+    );
+  });
+});

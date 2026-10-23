@@ -81,13 +81,16 @@ export function AssistantThread({ thread, replying, onApply, onDiscard, ...share
     return map;
   }, [thread.messages]);
 
-  const status = replying ? replyStatus(thread.messages, thread.phase, thread.streaming) : null;
+  const { progress } = thread;
+  const status = replying
+    ? replyStatus(thread.messages, thread.phase, thread.streaming, progress)
+    : null;
 
   // Follows the reply while the user is at the bottom; scrolling up stops following.
   useLayoutEffect(() => {
     const el = scroller.current;
     if (el && stick.current) el.scrollTop = el.scrollHeight;
-  }, [thread.messages, thread.streaming, thread.error, replying, status]);
+  }, [thread.messages, thread.streaming, thread.error, replying, status, progress]);
 
   useLayoutEffect(() => {
     stick.current = true;
@@ -95,7 +98,11 @@ export function AssistantThread({ thread, replying, onApply, onDiscard, ...share
     if (el) el.scrollTop = el.scrollHeight;
   }, [thread.opened]);
 
-  const blocks = useMemo(() => threadBlocks(thread.messages), [thread.messages]);
+  const building = progress?.groups;
+  const blocks = useMemo(
+    () => threadBlocks(thread.messages, building),
+    [thread.messages, building],
+  );
 
   return (
     <div
@@ -171,6 +178,7 @@ function ThreadBlock({
         <DraftCard
           groups={block.groups}
           status={block.status}
+          building={block.building}
           session={shared.session}
           run={shared.run}
           onCopy={shared.onCopy}

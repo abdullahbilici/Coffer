@@ -56,6 +56,8 @@ type Props = {
   compact?: boolean;
   groups: DraftGroup[];
   status: DraftStatus;
+  /** Still being drafted: Apply and Discard wait until it is stored. */
+  building?: boolean;
   session: Session;
   run: Run;
   onCopy: Copy;
@@ -68,6 +70,7 @@ export function DraftCard({
   compact = false,
   groups,
   status,
+  building = false,
   session,
   run,
   onCopy,
@@ -124,10 +127,16 @@ export function DraftCard({
             <span className={styles.count}>
               {changes === 1 ? "1 change" : `${changes} changes`}
             </span>
-            <Button size="sm" variant="ghost" disabled={busy} onClick={act(onDiscard)}>
+            <Button size="sm" variant="ghost" disabled={busy || building} onClick={act(onDiscard)}>
               Discard
             </Button>
-            <Button size="sm" variant="primary" icon={Check} disabled={busy} onClick={act(onApply)}>
+            <Button
+              size="sm"
+              variant="primary"
+              icon={Check}
+              disabled={busy || building}
+              onClick={act(onApply)}
+            >
               Apply
             </Button>
           </>

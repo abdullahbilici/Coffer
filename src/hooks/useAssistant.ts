@@ -8,6 +8,7 @@ import {
   type Message,
   type ReplyPhase,
 } from "../lib/api";
+import type { ImportProgress } from "../lib/assistant";
 import type { Session } from "./useSession";
 
 export type Assistant = ReturnType<typeof useAssistant>;
@@ -23,6 +24,8 @@ export type Thread = {
   streaming: string;
   /** Where the model call in progress is; `null` between calls and once the reply ends. */
   phase: ReplyPhase | null;
+  /** A running import's part and draft so far. */
+  progress: ImportProgress | null;
   /** Why the last reply failed. */
   error: string | null;
   /** Changes whenever another conversation is opened, not when a new chat gets its id. */
@@ -34,6 +37,7 @@ const NEW_THREAD: Thread = {
   messages: [],
   streaming: "",
   phase: null,
+  progress: null,
   error: null,
   opened: 0,
 };
@@ -101,6 +105,11 @@ export function useAssistant(session: Session, run: Run, reload: () => Promise<v
         setThread((t) => (t.id === id ? { ...t, phase } : t));
         return;
       }
+      if (event.type === "progress") {
+        const { part, parts, groups } = event;
+        setThread((t) => (t.id === id ? { ...t, progress: { part, parts, groups } } : t));
+        return;
+      }
       // Anything else ends the streamed text: it was stored, or the reply ended.
       cancelAnimationFrame(frame.current);
       frame.current = 0;
@@ -125,7 +134,9 @@ export function useAssistant(session: Session, run: Run, reload: () => Promise<v
         }
         setConversations((list) => updated(list, id, (c) => ({ ...c, replying: false })));
         const error = event.type === "failed" ? event.message : null;
-        setThread((t) => (t.id === id ? { ...t, streaming: "", phase: null, error } : t));
+        setThread((t) =>
+          t.id === id ? { ...t, streaming: "", phase: null, progress: null, error } : t,
+        );
       }
     };
     const unlisten = listen<AssistantEvent>(ASSISTANT_EVENT, (e) => onEvent(e.payload));

@@ -901,6 +901,7 @@ fn run(model: &Traced, db: &Mutex<Connection>, history: Vec<Turn>, apply: bool) 
     let saved = std::cell::RefCell::new(Vec::new());
     let lock = || db.lock().unwrap();
     let mut on_text = |_: &str| {};
+    let mut on_progress = |_: reply::Progress| {};
     let mut save = |turn: &Turn| {
         saved.borrow_mut().push(turn.clone());
         Ok(())
@@ -919,6 +920,7 @@ fn run(model: &Traced, db: &Mutex<Connection>, history: Vec<Turn>, apply: bool) 
             today: TODAY,
             on_text: &mut on_text,
             save: &mut save,
+            on_progress: &mut on_progress,
             cancelled: &|| false,
             check: &|| Ok(()),
         },

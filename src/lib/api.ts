@@ -110,6 +110,14 @@ export type AssistantEvent =
   /** The reply's text so far. */
   | { type: "text"; conversationId: number; text: string }
   | { type: "phase"; conversationId: number; phase: ReplyPhase }
+  /** An import starts `part` of `parts`; `groups` is what the parts before it drafted. */
+  | {
+      type: "progress";
+      conversationId: number;
+      part: number;
+      parts: number;
+      groups: DraftGroup[];
+    }
   | { type: "message"; conversationId: number; message: Message }
   | { type: "done"; conversationId: number }
   | { type: "failed"; conversationId: number; message: string };

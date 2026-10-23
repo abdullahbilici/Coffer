@@ -102,6 +102,13 @@ enum AssistantEvent {
         conversation_id: i64,
         phase: Phase,
     },
+    /// An import starts its next part; `groups` is what the parts before it drafted.
+    Progress {
+        conversation_id: i64,
+        part: usize,
+        parts: usize,
+        groups: Vec<draft::Group>,
+    },
     /// A stored turn of the reply.
     Message {
         conversation_id: i64,
@@ -450,6 +457,14 @@ fn reply(app: &AppHandle, id: i64, cancel: &Arc<AtomicBool>) -> AppResult<()> {
                     },
                 });
                 Ok(())
+            },
+            on_progress: &mut |progress| {
+                emit(AssistantEvent::Progress {
+                    conversation_id: id,
+                    part: progress.part,
+                    parts: progress.parts,
+                    groups: progress.groups,
+                })
             },
             cancelled: &|| cancel.load(Ordering::Relaxed),
             check: &|| state.session().require_entered(),

@@ -43,7 +43,8 @@ const TOOL_NAMES: Record<string, string> = {
 };
 
 /**
- * The quiet status under a reply in progress: the model loading, reading the prompt, writing
+ * The quiet status under a reply in progress: the model loading, an import's part, reading
+ * the prompt, writing
  * (while nothing visible has streamed yet), or a tool running: a read tool by name, a write
  * tool as drafting. `null` shows nothing.
  */
@@ -51,8 +52,10 @@ export function replyStatus(
   messages: Message[],
   phase: ReplyPhase | null,
   streaming: string,
+  progress: ImportProgress | null = null,
 ): string | null {
   if (phase === "loading") return "Loading model";
+  if (progress) return `Part ${progress.part} of ${progress.parts}`;
   // The calls of the last model turn, followed by the results that are in so far.
   let at = messages.length - 1;
   while (at >= 0 && messages[at].role === "tool") at--;
@@ -153,13 +156,30 @@ export type Block =
   | { kind: "reply"; key: string; text: string; read: Read }
   | { kind: "tools"; key: string; calls: ToolCall[] }
   | { kind: "stopped"; key: string }
-  | { kind: "draft"; key: string; id: number; groups: DraftGroup[]; status: DraftStatus };
+  | {
+      kind: "draft";
+      key: string;
+      id: number;
+      groups: DraftGroup[];
+      status: DraftStatus;
+      /** Still being drafted (an import between parts): not stored, can't be applied yet. */
+      building: boolean;
+    };
 
-export function threadBlocks(messages: Message[]): Block[] {
+/** Where an import is; `groups` is what the parts so far drafted. */
+export type ImportProgress = { part: number; parts: number; groups: DraftGroup[] };
+
+/**
+ * The thread as blocks, with an import's draft so far at the end. A draft is keyed by the
+ * message it answers, so the stored one takes over the card that was being filled in.
+ */
+export function threadBlocks(messages: Message[], building: DraftGroup[] = []): Block[] {
   const blocks: Block[] = [];
   let read = emptyRead();
+  let asked = 0;
   for (const m of messages) {
     if (m.role === "user") {
+      asked = m.id;
       blocks.push({ kind: "user", key: `user:${m.id}`, text: m.text, paste: m.paste ?? null });
       read = emptyRead();
     }
@@ -168,7 +188,14 @@ export function threadBlocks(messages: Message[]): Block[] {
     }
     if (m.role === "draft") {
       const { groups, status } = m;
-      blocks.push({ kind: "draft", key: `draft:${m.id}`, id: m.id, groups, status });
+      blocks.push({
+        kind: "draft",
+        key: `draft:${asked}`,
+        id: m.id,
+        groups,
+        status,
+        building: false,
+      });
     }
     if (m.role !== "assistant") continue;
     // Words next to tool calls are the model thinking aloud ("Let me search…", or a summary
@@ -193,6 +220,10 @@ export function threadBlocks(messages: Message[]): Block[] {
       else blocks.push({ kind: "tools", key: `tools:${m.id}`, calls: m.toolCalls });
     }
     if (m.stopped) blocks.push({ kind: "stopped", key: `stopped:${m.id}` });
+  }
+  if (building.length > 0) {
+    const key = `draft:${asked}`;
+    blocks.push({ kind: "draft", key, id: 0, groups: building, status: "pending", building: true });
   }
   return blocks;
 }
