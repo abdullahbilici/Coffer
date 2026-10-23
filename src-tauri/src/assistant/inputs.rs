@@ -37,7 +37,7 @@ enum Form {
 const MIN_LEN: usize = 6;
 
 /// Prefixes that say what a key is without giving any of it away.
-const PREFIXES: [&str; 22] = [
+pub(super) const PREFIXES: [&str; 22] = [
     "sk_live_",
     "sk_test_",
     "pk_live_",

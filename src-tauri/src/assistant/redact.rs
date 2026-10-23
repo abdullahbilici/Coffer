@@ -4,11 +4,12 @@
 //! - `[n12.0: value]` becomes `[n12.0]`, whatever the model wrote after the colon;
 //! - a known secret written out becomes its handle, so the app shows it from the vault;
 //! - a near-copy of a known secret (length within 2, at least 80% alike) becomes the handle of
-//!   the true value, and a near-copy of a long copyable value becomes that value.
+//!   the true value, and a near-copy of a long copyable value becomes that value;
+//! - the start of a known secret cut off with an ellipsis becomes its handle.
 
 use zeroize::Zeroizing;
 
-use super::handles::Handle;
+use super::{handles::Handle, inputs};
 
 /// Values shorter than this are compared only when they hold more than letters.
 const MIN_WORDLIKE: usize = 8;
@@ -18,6 +19,8 @@ const MIN_VERBATIM: usize = 4;
 const MIN_NEAR: usize = 8;
 /// Shortest copyable value whose near-copies are corrected.
 const MIN_NEAR_COPYABLE: usize = 12;
+/// Shortest start of a secret that, cut off with an ellipsis, stands for it.
+const MIN_TRUNCATED: usize = 6;
 /// Longest length difference of a near-copy.
 const MAX_LEN_DIFF: usize = 2;
 
@@ -214,6 +217,12 @@ fn near_word(word: &str, known: &Known) -> Option<String> {
     if core.starts_with('[') {
         return None;
     }
+    if let Some(handle) = truncated(core, &word[end..], known) {
+        let after = &word[end..];
+        let after = after.strip_prefix("...").unwrap_or(after);
+        let (before, after) = unwrap_marks(&word[..start], after);
+        return Some(format!("{before}{handle}{after}"));
+    }
     let candidates = std::iter::once(0).chain(
         core.find(['=', ':'])
             .filter(|_| !core.contains("://"))
@@ -233,6 +242,31 @@ fn near_word(word: &str, known: &Known) -> Option<String> {
         }
     }
     None
+}
+
+/// The handle of the secret a word abbreviates (`sk_live_51Nz…`): a model that shortens a value
+/// still shows part of it, and a copy of that part is useless.
+fn truncated<'a>(core: &str, after: &str, known: &'a Known) -> Option<&'a str> {
+    let stem = match core.strip_suffix('…') {
+        Some(stem) => stem,
+        None if after.starts_with("...") => core,
+        None => return None,
+    };
+    // A well-known prefix alone (`sk_live_…`) names a kind of key, not one key.
+    let prefix = inputs::PREFIXES
+        .iter()
+        .filter(|p| stem.starts_with(*p))
+        .map(|p| p.len())
+        .max()
+        .unwrap_or(0);
+    if stem.chars().count() < MIN_TRUNCATED || stem.len() <= prefix {
+        return None;
+    }
+    known
+        .secrets
+        .iter()
+        .find(|(_, value)| value.len() > stem.len() && value.starts_with(stem))
+        .map(|(handle, _)| handle.as_str())
 }
 
 enum Near<'a> {
@@ -394,6 +428,23 @@ mod tests {
                 &k
             ),
             "Console: `https://acme-demo.signin.aws.amazon.com/console`"
+        );
+    }
+
+    #[test]
+    fn abbreviated_secrets_become_handles() {
+        let k = known();
+        assert_eq!(
+            redact("Secret key: [n2.0] (`sk_live_51NzQ…` — live).", &k),
+            "Secret key: [n2.0] ([n2.0] — live)."
+        );
+        assert_eq!(
+            redact("starts with eyJhbGciOi...", &k),
+            "starts with [n3.1]"
+        );
+        assert_eq!(
+            redact("keys look like sk_live_…", &k),
+            "keys look like sk_live_…"
         );
     }
 
