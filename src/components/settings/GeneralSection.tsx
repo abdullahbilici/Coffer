@@ -6,6 +6,7 @@ import { api, type Settings } from "../../lib/api";
 import { Segmented } from "../ui/Segmented";
 import { Select } from "../ui/Select";
 import { SettingRow } from "./SettingRow";
+import { ShortcutField } from "./ShortcutField";
 
 const UNLOCK_WINDOW_OPTIONS = [
   { value: 60, label: "1 minute" },
@@ -51,6 +52,13 @@ export function GeneralSection({ settings, onChange, session, run, ...props }: P
       onChange({ ...settings, clipboardClearSecs: secs });
     });
 
+  // The backend registers it first and keeps the old one if it can't.
+  const setCaptureShortcut = (shortcut: string | null) =>
+    run(async () => {
+      await session.withUnlock(() => api.setCaptureShortcut(shortcut));
+      onChange({ ...settings, captureShortcut: shortcut });
+    });
+
   return (
     <>
       <SettingRow label="Unlock window">
@@ -67,6 +75,13 @@ export function GeneralSection({ settings, onChange, session, run, ...props }: P
           value={settings.clipboardClearSecs}
           options={CLIPBOARD_OPTIONS}
           onChange={setClipboardClear}
+        />
+      </SettingRow>
+      <SettingRow label="Quick capture">
+        <ShortcutField
+          label="Quick capture shortcut"
+          value={settings.captureShortcut}
+          onChange={setCaptureShortcut}
         />
       </SettingRow>
       <SettingRow label="Appearance">
