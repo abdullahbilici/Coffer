@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { Tree } from "./api";
-import { toolLabel, withSecretChips } from "./assistant";
+import type { Message, Tree } from "./api";
+import { threadBlocks, toolLabel, withSecretChips } from "./assistant";
 
 const tree: Tree = {
   projects: [{ id: 1, name: "Acme" }],
@@ -55,5 +55,30 @@ describe("toolLabel", () => {
     );
     expect(toolLabel(call("list_todos"), tree)).toBe("Checked todos");
     expect(toolLabel(call("mystery"), tree)).toBe("mystery");
+  });
+});
+
+describe("threadBlocks", () => {
+  const call = (id: string) => ({ id, name: "search", arguments: {} });
+  const at = { createdAt: 0 };
+
+  it("groups tool calls in a row and hides tool results", () => {
+    const messages: Message[] = [
+      { id: 1, ...at, role: "user", text: "hi" },
+      { id: 2, ...at, role: "assistant", text: "", toolCalls: [call("a")], stopped: false },
+      { id: 3, ...at, role: "tool", callId: "a", name: "search", result: "r" },
+      { id: 4, ...at, role: "assistant", text: "", toolCalls: [call("b")], stopped: false },
+      { id: 5, ...at, role: "tool", callId: "b", name: "search", result: "r" },
+      { id: 6, ...at, role: "assistant", text: "Done", toolCalls: [], stopped: false },
+      { id: 7, ...at, role: "assistant", text: "", toolCalls: [], stopped: true },
+    ];
+    expect(threadBlocks(messages).map((b) => [b.kind, b.key])).toEqual([
+      ["user", "user:1"],
+      ["tools", "tools:2"],
+      ["reply", "reply:6"],
+      ["stopped", "stopped:7"],
+    ]);
+    const tools = threadBlocks(messages)[1];
+    expect(tools.kind === "tools" && tools.calls.map((c) => c.id)).toEqual(["a", "b"]);
   });
 });

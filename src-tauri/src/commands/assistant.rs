@@ -85,10 +85,10 @@ pub struct Sent {
     rename_all_fields = "camelCase"
 )]
 enum AssistantEvent {
-    /// Streamed reply text, before its turn is stored.
+    /// The reply's text so far, before its turn is stored.
     Text {
         conversation_id: i64,
-        delta: String,
+        text: String,
     },
     /// A stored turn of the reply.
     Message {
@@ -355,10 +355,10 @@ fn reply(app: &AppHandle, id: i64, cancel: &Arc<AtomicBool>) -> AppResult<()> {
         &specs,
         &mut history,
         Hooks {
-            on_text: &mut |delta| {
+            on_text: &mut |text| {
                 emit(AssistantEvent::Text {
                     conversation_id: id,
-                    delta: delta.to_string(),
+                    text: text.to_string(),
                 })
             },
             save: &mut |turn| {

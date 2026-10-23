@@ -19,7 +19,7 @@ use ureq::{
 };
 use zeroize::Zeroizing;
 
-use super::{NUM_CTX, Reply, Request, ToolCall, Turn, agent::Model};
+use super::{NUM_CTX, Reply, Request, ToolCall, Turn, agent::Model, visible_text};
 use crate::error::{AppError, AppResult};
 
 /// How often a waiting reply checks for cancel.
@@ -218,6 +218,7 @@ impl Model for Ollama {
         });
 
         let mut reply = Reply::default();
+        let mut raw = String::new();
         loop {
             if self.cancel.load(Ordering::Relaxed) {
                 reply.stopped = true;
@@ -236,8 +237,12 @@ impl Model for Ollama {
             if let Some(delta) = message["content"].as_str()
                 && !delta.is_empty()
             {
-                reply.text.push_str(delta);
-                on_text(delta);
+                raw.push_str(delta);
+                let shown = visible_text(&raw);
+                if shown != reply.text {
+                    reply.text = shown.to_string();
+                    on_text(&reply.text);
+                }
             }
             for call in message["tool_calls"].as_array().into_iter().flatten() {
                 reply.tool_calls.push(ToolCall {

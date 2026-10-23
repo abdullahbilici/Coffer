@@ -156,6 +156,19 @@ fn turn_len(turn: &Turn) -> usize {
     }
 }
 
+/// What to show of a reply. Some models (qwen3 after tool calls) still reason in their content
+/// with `think: false`, ending it with `</think>`: only the text after the last one is the
+/// answer, and nothing shows while an opened `<think>` block runs.
+pub fn visible_text(raw: &str) -> &str {
+    if let Some(end) = raw.rfind("</think>") {
+        return raw[end + "</think>".len()..].trim_start();
+    }
+    if raw.trim_start().starts_with("<think>") {
+        return "";
+    }
+    raw
+}
+
 /// A short title for a new conversation: the first line of its first message.
 pub fn title_from(text: &str) -> String {
     const MAX: usize = 60;
@@ -249,6 +262,16 @@ mod tests {
             model_turns(&history),
             [user("middle"), assistant(&long, 0), user("now")]
         );
+    }
+
+    #[test]
+    fn hides_reasoning_before_the_answer() {
+        assert_eq!(
+            visible_text("Draft answer.\n</think>\n\nAnswer."),
+            "Answer."
+        );
+        assert_eq!(visible_text("<think>still going"), "");
+        assert_eq!(visible_text("Plain answer"), "Plain answer");
     }
 
     #[test]

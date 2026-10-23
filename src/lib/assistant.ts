@@ -1,4 +1,4 @@
-import type { ToolCall, Tree } from "./api";
+import type { Message, ToolCall, Tree } from "./api";
 
 /**
  * A secret handle the assistant writes: `[n12.0]` (note 12, secret 0), `[p3.0]` (project
@@ -60,4 +60,27 @@ export function toolLabel(call: ToolCall, tree: Tree): string {
     default:
       return call.name;
   }
+}
+
+/** What the thread shows, in order. Tool calls in a row form one group, whichever turns made them. */
+export type Block =
+  | { kind: "user"; key: string; text: string }
+  | { kind: "reply"; key: string; text: string }
+  | { kind: "tools"; key: string; calls: ToolCall[] }
+  | { kind: "stopped"; key: string };
+
+export function threadBlocks(messages: Message[]): Block[] {
+  const blocks: Block[] = [];
+  for (const m of messages) {
+    if (m.role === "user") blocks.push({ kind: "user", key: `user:${m.id}`, text: m.text });
+    if (m.role !== "assistant") continue;
+    if (m.text) blocks.push({ kind: "reply", key: `reply:${m.id}`, text: m.text });
+    if (m.toolCalls.length > 0) {
+      const last = blocks.at(-1);
+      if (last?.kind === "tools") last.calls = [...last.calls, ...m.toolCalls];
+      else blocks.push({ kind: "tools", key: `tools:${m.id}`, calls: m.toolCalls });
+    }
+    if (m.stopped) blocks.push({ kind: "stopped", key: `stopped:${m.id}` });
+  }
+  return blocks;
 }

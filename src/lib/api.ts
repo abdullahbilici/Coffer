@@ -71,7 +71,8 @@ export type Message = Turn & { id: number; createdAt: number };
 
 /** Mirrors `commands::assistant::AssistantEvent`. */
 export type AssistantEvent =
-  | { type: "text"; conversationId: number; delta: string }
+  /** The reply's text so far. */
+  | { type: "text"; conversationId: number; text: string }
   | { type: "message"; conversationId: number; message: Message }
   | { type: "done"; conversationId: number }
   | { type: "failed"; conversationId: number; message: string };

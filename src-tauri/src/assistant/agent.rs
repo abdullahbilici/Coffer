@@ -10,11 +10,13 @@ use crate::error::AppResult;
 pub const MAX_STEPS: usize = 8;
 
 pub trait Model {
-    /// Streams text through `on_text` as it arrives and returns the whole reply.
+    /// Reports the reply's visible text so far through `on_text` as it grows (it can also
+    /// shrink, when reasoning turns out to precede it) and returns the whole reply.
     fn chat(&self, request: &Request, on_text: &mut dyn FnMut(&str)) -> AppResult<Reply>;
 }
 
 pub struct Hooks<'a> {
+    /// The visible text of the reply being written, so far.
     pub on_text: &'a mut dyn FnMut(&str),
     /// Stores a finished turn; the frontend learns about it from here.
     pub save: &'a mut dyn FnMut(&Turn) -> AppResult<()>,

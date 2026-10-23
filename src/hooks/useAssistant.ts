@@ -53,7 +53,7 @@ export function useAssistant(session: Session, run: Run) {
     if (!session.unlocked) forget();
   }, [session.unlocked, forget]);
 
-  // Streamed text arrives per token; it is applied once per frame so long replies stay smooth.
+  // Streamed text arrives per token; the latest is applied once per frame so replies stay smooth.
   const pending = useRef<{ id: number; text: string } | null>(null);
   const frame = useRef(0);
   const flush = useCallback(() => {
@@ -61,7 +61,7 @@ export function useAssistant(session: Session, run: Run) {
     const chunk = pending.current;
     pending.current = null;
     if (!chunk) return;
-    setThread((t) => (t.id === chunk.id ? { ...t, streaming: t.streaming + chunk.text } : t));
+    setThread((t) => (t.id === chunk.id ? { ...t, streaming: chunk.text } : t));
   }, []);
 
   useEffect(() => {
@@ -69,7 +69,7 @@ export function useAssistant(session: Session, run: Run) {
       const id = event.conversationId;
       if (event.type === "text") {
         if (id !== threadId.current) return;
-        pending.current = { id, text: (pending.current?.text ?? "") + event.delta };
+        pending.current = { id, text: event.text };
         if (!frame.current) frame.current = requestAnimationFrame(flush);
         return;
       }

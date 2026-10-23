@@ -16,8 +16,8 @@ import type { Copy, Run } from "../../app/actions";
 import type { Thread } from "../../hooks/useAssistant";
 import { useHandleChips } from "../../hooks/useHandleChips";
 import type { Session } from "../../hooks/useSession";
-import type { Message, ToolCall, Tree } from "../../lib/api";
-import { toolLabel, withSecretChips } from "../../lib/assistant";
+import type { ToolCall, Tree } from "../../lib/api";
+import { threadBlocks, toolLabel, withSecretChips, type Block } from "../../lib/assistant";
 import { cx } from "../../lib/cx";
 import { Markdown } from "./Markdown";
 import styles from "./Assistant.module.css";
@@ -63,6 +63,7 @@ export function AssistantThread({ thread, replying, ...shared }: Props) {
     if (el) el.scrollTop = el.scrollHeight;
   }, [thread.opened]);
 
+  const blocks = useMemo(() => threadBlocks(thread.messages), [thread.messages]);
   const last = thread.messages.at(-1);
   const waiting = replying && !thread.streaming && (last?.role === "user" || last?.role === "tool");
 
@@ -81,10 +82,10 @@ export function AssistantThread({ thread, replying, ...shared }: Props) {
         </p>
       ) : (
         <div key={thread.opened} className={styles.messages}>
-          {thread.messages.map((message) => (
-            <ThreadMessage
-              key={message.id}
-              message={message}
+          {blocks.map((block) => (
+            <ThreadBlock
+              key={block.key}
+              block={block}
               results={results}
               replying={replying}
               {...shared}
@@ -105,38 +106,34 @@ export function AssistantThread({ thread, replying, ...shared }: Props) {
   );
 }
 
-type ThreadMessageProps = Shared & {
-  message: Message;
+type ThreadBlockProps = Shared & {
+  block: Block;
   results: ReadonlyMap<string, string>;
   replying: boolean;
 };
 
-function ThreadMessage({ message, results, replying, ...shared }: ThreadMessageProps) {
-  switch (message.role) {
+function ThreadBlock({ block, results, replying, ...shared }: ThreadBlockProps) {
+  switch (block.kind) {
     case "user":
-      return <div className={styles.user}>{message.text}</div>;
-    case "assistant":
+      return <div className={styles.user}>{block.text}</div>;
+    case "reply":
+      return <Reply text={block.text} {...shared} />;
+    case "tools":
       return (
-        <>
-          {message.text && <Reply text={message.text} {...shared} />}
-          {message.toolCalls.length > 0 && (
-            <div className={styles.tools}>
-              {message.toolCalls.map((call) => (
-                <ToolRow
-                  key={call.id}
-                  call={call}
-                  result={results.get(call.id)}
-                  pending={replying}
-                  tree={shared.tree}
-                />
-              ))}
-            </div>
-          )}
-          {message.stopped && <p className={styles.stopped}>Stopped</p>}
-        </>
+        <div className={styles.tools}>
+          {block.calls.map((call) => (
+            <ToolRow
+              key={call.id}
+              call={call}
+              result={results.get(call.id)}
+              pending={replying}
+              tree={shared.tree}
+            />
+          ))}
+        </div>
       );
-    case "tool":
-      return null;
+    case "stopped":
+      return <p className={styles.stopped}>Stopped</p>;
   }
 }
 
