@@ -92,6 +92,7 @@ export function DraftCard({ groups, status, session, run, onCopy, onApply, onDis
               <Entry
                 key={e}
                 entry={entry}
+                inNewGroup={group.new}
                 id={`${g}:${e}`}
                 folded={fold && entry.lines.length > 0}
                 secrets={secrets}
@@ -128,11 +129,14 @@ type Secrets = ReturnType<typeof useDraftSecrets>;
 
 function Entry({
   entry,
+  inNewGroup,
   id,
   folded,
   secrets,
 }: {
   entry: DraftEntry;
+  /** Everything in a new project is new; the group says so once. */
+  inNewGroup: boolean;
   id: string;
   folded: boolean;
   secrets: Secrets;
@@ -160,9 +164,11 @@ function Entry({
           {entry.lines.length === 1 ? "1 field" : `${entry.lines.length} fields`}
         </span>
       )}
-      <span className={cx(styles.action, entry.action === "delete" && styles.actionDanger)}>
-        {ACTION_LABELS[entry.action]}
-      </span>
+      {!(inNewGroup && entry.action === "add") && (
+        <span className={cx(styles.action, entry.action === "delete" && styles.actionDanger)}>
+          {ACTION_LABELS[entry.action]}
+        </span>
+      )}
       {folded && hasLines && (
         <ChevronRight
           size={12}

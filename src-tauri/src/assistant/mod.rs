@@ -298,9 +298,13 @@ pub fn visible_text(raw: &str) -> &str {
 /// A short title for a new conversation: the first line of its first message.
 pub fn title_from(text: &str) -> String {
     const MAX: usize = 60;
+    // Headings and dump decoration ("## Acme", "[Acme]", "=== Acme ===") aren't the title.
     let line = text
         .lines()
-        .map(str::trim)
+        .map(|l| {
+            l.trim()
+                .trim_matches(['#', '=', '[', ']', '>', '-', ':', '*', '|', ' '])
+        })
         .find(|l| !l.is_empty())
         .unwrap_or("");
     if line.chars().count() <= MAX {
@@ -403,6 +407,8 @@ mod tests {
     #[test]
     fn titles_use_the_first_line() {
         assert_eq!(title_from("\n  How do I log in?\nmore"), "How do I log in?");
+        assert_eq!(title_from("## acme işleri\nsentry"), "acme işleri");
+        assert_eq!(title_from("=== Muhit ===:"), "Muhit");
         let long = "word ".repeat(20);
         let title = title_from(&long);
         assert!(title.ends_with('…') && title.chars().count() <= 61);
