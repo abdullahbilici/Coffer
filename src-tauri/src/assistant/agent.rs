@@ -54,6 +54,7 @@ pub fn respond(
             text: String::new(),
             tool_calls: Vec::new(),
             stopped: true,
+            thinking: String::new(),
         };
         save(&turn)?;
         history.push(turn);
@@ -83,13 +84,15 @@ pub fn respond(
             }
         }
         let text = reply.text.trim().to_string();
-        if text.is_empty() && calls.is_empty() && !stopped {
+        let thinking = reply.thinking.trim().to_string();
+        if text.is_empty() && thinking.is_empty() && calls.is_empty() && !stopped {
             return Ok(());
         }
         let turn = Turn::Assistant {
             text,
             tool_calls: calls.clone(),
             stopped,
+            thinking,
         };
         (hooks.save)(&turn)?;
         history.push(turn);
@@ -160,6 +163,7 @@ mod tests {
                 arguments: json!({ "query": "aws" }),
             }],
             stopped: false,
+            thinking: String::new(),
         }
     }
 
@@ -220,7 +224,8 @@ mod tests {
             Turn::Assistant {
                 text: "Note 12 has it.".into(),
                 tool_calls: Vec::new(),
-                stopped: false
+                stopped: false,
+                thinking: String::new(),
             }
         );
         assert_eq!(streamed, " Note 12 has it. ");
@@ -250,7 +255,8 @@ mod tests {
             Some(&Turn::Assistant {
                 text: String::new(),
                 tool_calls: Vec::new(),
-                stopped: true
+                stopped: true,
+                thinking: String::new(),
             })
         );
     }
@@ -268,7 +274,8 @@ mod tests {
             Turn::Assistant {
                 text: "Looking".into(),
                 tool_calls: Vec::new(),
-                stopped: true
+                stopped: true,
+                thinking: String::new(),
             }
         );
     }

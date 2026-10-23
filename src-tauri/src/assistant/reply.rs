@@ -110,10 +110,12 @@ pub fn reply(model: &dyn Model, prompts: &Prompts, history: &[Turn], io: Io) -> 
             text,
             tool_calls,
             stopped,
+            thinking,
         } => save(&Turn::Assistant {
             text: redact::redact(text, &known),
             tool_calls: tool_calls.clone(),
             stopped: *stopped,
+            thinking: redact::redact(thinking, &known),
         }),
         _ => save(turn),
     };
@@ -294,6 +296,7 @@ fn import(
                 text: String::new(),
                 tool_calls: Vec::new(),
                 stopped: true,
+                thinking: String::new(),
             });
         }
         progress(n + 1, parts, &draft.ops)?;
@@ -326,6 +329,7 @@ fn import(
                     text: String::new(),
                     tool_calls: calls,
                     stopped: *stopped,
+                    thinking: String::new(),
                 })
             }
             Turn::Tool {
@@ -368,6 +372,7 @@ fn import(
             text: "Nothing new to import.".to_string(),
             tool_calls: Vec::new(),
             stopped: false,
+            thinking: String::new(),
         })?;
     }
     Ok(())
@@ -525,6 +530,7 @@ mod tests {
                 calls("get_note", json!({ "id": 1 })),
                 Reply {
                     text: format!("The token is `{miscopied}` (GitHub)."),
+                    thinking: format!("The note says {token}."),
                     ..Reply::default()
                 },
             ]),
@@ -565,10 +571,11 @@ mod tests {
             result.contains("Token: [n1.0]") && !result.contains(token),
             "{result}"
         );
-        let Turn::Assistant { text, .. } = &saved[2] else {
+        let Turn::Assistant { text, thinking, .. } = &saved[2] else {
             panic!("{saved:?}");
         };
         assert_eq!(text, "The token is [n1.0] (GitHub).");
+        assert_eq!(thinking, "The note says [n1.0].");
         assert!(!streamed.borrow().contains("ghp_"), "{}", streamed.borrow());
     }
 

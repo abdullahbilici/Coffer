@@ -96,7 +96,14 @@ export type DraftStatus = "pending" | "applied" | "discarded";
 /** Mirrors `assistant::Turn`. Assistant text may hold secret handles like `[n12.0]`. */
 export type Turn =
   | { role: "user"; text: string; paste?: string }
-  | { role: "assistant"; text: string; toolCalls: ToolCall[]; stopped: boolean }
+  | {
+      role: "assistant";
+      text: string;
+      toolCalls: ToolCall[];
+      stopped: boolean;
+      /** Reasoning the model wrote before `text`. */
+      thinking?: string;
+    }
   | { role: "tool"; callId: string; name: string; result: string }
   | { role: "draft"; groups: DraftGroup[]; status: DraftStatus };
 
@@ -107,8 +114,8 @@ export type Message = Turn & { id: number; createdAt: number };
 export type ReplyPhase = "loading" | "reading" | "writing";
 
 export type AssistantEvent =
-  /** The reply's text so far. */
-  | { type: "text"; conversationId: number; text: string }
+  /** The reply's text so far, and the reasoning written before it. */
+  | { type: "text"; conversationId: number; text: string; thinking: string }
   | { type: "phase"; conversationId: number; phase: ReplyPhase }
   /** An import starts `part` of `parts`; `groups` is what the parts before it drafted. */
   | {

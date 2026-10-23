@@ -23,7 +23,10 @@ use ureq::{
 };
 use zeroize::Zeroizing;
 
-use super::{NUM_CTX, NUM_PREDICT, Reply, Request, ToolCall, Turn, agent::Model, visible_text};
+use super::{
+    NUM_CTX, NUM_PREDICT, Reply, Request, ToolCall, Turn, agent::Model, join_thinking,
+    split_thinking,
+};
 use crate::error::{AppError, AppResult};
 
 /// How often a waiting reply checks for cancel.
@@ -379,10 +382,11 @@ impl Model for Ollama {
                 && !delta.is_empty()
             {
                 raw.push_str(delta);
-                let shown = visible_text(&raw);
-                if shown != reply.text {
-                    reply.text = shown.to_string();
-                    on_text(&reply.text);
+                let (thinking, text) = split_thinking(&raw);
+                if thinking != reply.thinking || text != reply.text {
+                    reply.text = text.to_string();
+                    reply.thinking = thinking;
+                    on_text(&join_thinking(&reply.thinking, &reply.text));
                 }
             }
             for call in message["tool_calls"].as_array().into_iter().flatten() {
@@ -432,6 +436,7 @@ mod tests {
                     arguments: json!({ "query": "aws" }),
                 }],
                 stopped: false,
+                thinking: String::new(),
             },
             Turn::Tool {
                 call_id: "c1".into(),

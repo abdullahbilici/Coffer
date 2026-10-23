@@ -5,6 +5,7 @@ import { AppWindow, Check, Sparkles } from "lucide-react";
 import { IconButton } from "../components/ui/IconButton";
 import { AssistantReply } from "../components/views/AssistantReply";
 import { DraftCard } from "../components/views/DraftCard";
+import { ThinkingRow } from "../components/views/ThinkingRow";
 import { useAssistant, warmUp } from "../hooks/useAssistant";
 import { useSession } from "../hooks/useSession";
 import { useToast } from "../hooks/useToast";
@@ -219,7 +220,7 @@ export function Capture() {
             )}
           </div>
         </form>
-        {(blocks.length > 0 || thread.streaming || thread.error || error) && (
+        {(blocks.length > 0 || thread.streaming || thread.thinking || thread.error || error) && (
           <div key={thread.opened} className={styles.result}>
             {blocks.map((block) => {
               switch (block.kind) {
@@ -243,6 +244,12 @@ export function Capture() {
                       onDiscard={() => discardDraft(block.id)}
                     />
                   );
+                case "thinking":
+                  return (
+                    <div key={block.key} className={styles.thinking}>
+                      <ThinkingRow text={block.text} session={session} run={run} onCopy={copy} />
+                    </div>
+                  );
                 case "stopped":
                   return (
                     <p key={block.key} className={styles.quiet}>
@@ -253,6 +260,17 @@ export function Capture() {
                   return null;
               }
             })}
+            {thread.thinking && (
+              <div className={styles.thinking}>
+                <ThinkingRow
+                  text={thread.thinking}
+                  live
+                  session={session}
+                  run={run}
+                  onCopy={copy}
+                />
+              </div>
+            )}
             {thread.streaming && (
               <div className={styles.answer}>
                 <AssistantReply text={thread.streaming} session={session} run={run} onCopy={copy} />

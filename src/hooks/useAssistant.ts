@@ -22,6 +22,8 @@ export type Thread = {
   messages: Message[];
   /** Reply text streaming in, not stored yet. */
   streaming: string;
+  /** Reasoning streaming in before that text. */
+  thinking: string;
   /** Where the model call in progress is; `null` between calls and once the reply ends. */
   phase: ReplyPhase | null;
   /** A running import's part and draft so far. */
@@ -36,6 +38,7 @@ const NEW_THREAD: Thread = {
   id: null,
   messages: [],
   streaming: "",
+  thinking: "",
   phase: null,
   progress: null,
   error: null,
@@ -81,14 +84,15 @@ export function useAssistant(session: Session, run: Run, reload: () => Promise<v
   }, [session.unlocked, forget]);
 
   // Streamed text arrives per token; the latest is applied once per frame so replies stay smooth.
-  const pending = useRef<{ id: number; text: string } | null>(null);
+  const pending = useRef<{ id: number; text: string; thinking: string } | null>(null);
   const frame = useRef(0);
   const flush = useCallback(() => {
     frame.current = 0;
     const chunk = pending.current;
     pending.current = null;
     if (!chunk) return;
-    setThread((t) => (t.id === chunk.id ? { ...t, streaming: chunk.text } : t));
+    const { text, thinking } = chunk;
+    setThread((t) => (t.id === chunk.id ? { ...t, streaming: text, thinking } : t));
   }, []);
 
   useEffect(() => {
@@ -96,7 +100,7 @@ export function useAssistant(session: Session, run: Run, reload: () => Promise<v
       const id = event.conversationId;
       if (event.type === "text") {
         if (id !== threadId.current) return;
-        pending.current = { id, text: event.text };
+        pending.current = { id, text: event.text, thinking: event.thinking };
         if (!frame.current) frame.current = requestAnimationFrame(flush);
         return;
       }
@@ -125,6 +129,7 @@ export function useAssistant(session: Session, run: Run, reload: () => Promise<v
                 ...t,
                 messages: [...t.messages, message],
                 streaming: "",
+                thinking: "",
                 phase: null,
                 // The stored draft takes over from the one being filled in.
                 progress: message.role === "draft" ? null : t.progress,
@@ -142,7 +147,9 @@ export function useAssistant(session: Session, run: Run, reload: () => Promise<v
         setConversations((list) => updated(list, id, (c) => ({ ...c, replying: false })));
         const error = event.type === "failed" ? event.message : null;
         setThread((t) =>
-          t.id === id ? { ...t, streaming: "", phase: null, progress: null, error } : t,
+          t.id === id
+            ? { ...t, streaming: "", thinking: "", phase: null, progress: null, error }
+            : t,
         );
       }
     };

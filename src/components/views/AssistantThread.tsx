@@ -29,6 +29,7 @@ import {
 import { cx } from "../../lib/cx";
 import { AssistantReply } from "./AssistantReply";
 import { DraftCard } from "./DraftCard";
+import { ThinkingRow } from "./ThinkingRow";
 import styles from "./Assistant.module.css";
 
 const TOOL_ICONS: Record<string, LucideIcon> = {
@@ -83,14 +84,22 @@ export function AssistantThread({ thread, replying, onApply, onDiscard, ...share
 
   const { progress } = thread;
   const status = replying
-    ? replyStatus(thread.messages, thread.phase, thread.streaming, progress)
+    ? replyStatus(thread.messages, thread.phase, thread.streaming || thread.thinking, progress)
     : null;
 
   // Follows the reply while the user is at the bottom; scrolling up stops following.
   useLayoutEffect(() => {
     const el = scroller.current;
     if (el && stick.current) el.scrollTop = el.scrollHeight;
-  }, [thread.messages, thread.streaming, thread.error, replying, status, progress]);
+  }, [
+    thread.messages,
+    thread.streaming,
+    thread.thinking,
+    thread.error,
+    replying,
+    status,
+    progress,
+  ]);
 
   useLayoutEffect(() => {
     stick.current = true;
@@ -130,6 +139,17 @@ export function AssistantThread({ thread, replying, onApply, onDiscard, ...share
               {...shared}
             />
           ))}
+          {thread.thinking && (
+            <div className={styles.tools}>
+              <ThinkingRow
+                text={thread.thinking}
+                live
+                session={shared.session}
+                run={shared.run}
+                onCopy={shared.onCopy}
+              />
+            </div>
+          )}
           {thread.streaming && (
             <AssistantReply
               text={thread.streaming}
@@ -211,6 +231,17 @@ function ThreadBlock({
               tree={shared.tree}
             />
           ))}
+        </div>
+      );
+    case "thinking":
+      return (
+        <div className={styles.tools}>
+          <ThinkingRow
+            text={block.text}
+            session={shared.session}
+            run={shared.run}
+            onCopy={shared.onCopy}
+          />
         </div>
       );
     case "stopped":

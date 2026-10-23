@@ -41,6 +41,9 @@ pub enum Turn {
         /// The user stopped the reply before it finished.
         #[serde(default)]
         stopped: bool,
+        /// Reasoning the model wrote before `text` (see `split_thinking`). Never sent back to it.
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        thinking: String,
     },
     Tool {
         call_id: String,
@@ -94,6 +97,8 @@ pub struct Request<'a> {
 #[derive(Default)]
 pub struct Reply {
     pub text: String,
+    /// Reasoning the model wrote in its content before the answer.
+    pub thinking: String,
     pub tool_calls: Vec<ToolCall>,
     /// Cancelled while streaming; `text` holds what arrived until then.
     pub stopped: bool,
@@ -264,6 +269,7 @@ fn said(text: String) -> Turn {
         text,
         tool_calls: Vec::new(),
         stopped: false,
+        thinking: String::new(),
     }
 }
 
@@ -297,17 +303,40 @@ fn turn_len(turn: &Turn) -> usize {
     }
 }
 
-/// What to show of a reply. Some models (qwen3 after tool calls) still reason in their content
-/// with `think: false`, ending it with `</think>`: only the text after the last one is the
-/// answer, and nothing shows while an opened `<think>` block runs.
-pub fn visible_text(raw: &str) -> &str {
-    if let Some(end) = raw.rfind("</think>") {
-        return raw[end + "</think>".len()..].trim_start();
+/// Ends a model's reasoning in its content. Some models (qwen3 after tool calls) still reason
+/// there with `think: false`, closing it with `</think>`, sometimes without an opening tag.
+const THINK_END: &str = "</think>";
+const THINK_START: &str = "<think>";
+
+/// A reply's reasoning and its answer: everything before the last `</think>` is reasoning (tags
+/// dropped), the rest the answer. An opened `<think>` block still running is all reasoning.
+pub fn split_thinking(raw: &str) -> (String, &str) {
+    let reasoning = |text: &str| {
+        text.replace(THINK_START, "")
+            .replace(THINK_END, "")
+            .trim()
+            .to_string()
+    };
+    if let Some(end) = raw.rfind(THINK_END) {
+        return (
+            reasoning(&raw[..end]),
+            raw[end + THINK_END.len()..].trim_start(),
+        );
     }
-    if raw.trim_start().starts_with("<think>") {
-        return "";
+    match raw.trim_start().strip_prefix(THINK_START) {
+        Some(rest) => (reasoning(rest), ""),
+        None => (String::new(), raw),
     }
-    raw
+}
+
+/// Reasoning and answer as one streamed text, which `split_thinking` takes apart again; the
+/// safety net reads both in one pass.
+pub fn join_thinking(thinking: &str, text: &str) -> String {
+    if thinking.is_empty() {
+        text.to_string()
+    } else {
+        format!("{thinking}{THINK_END}{text}")
+    }
 }
 
 /// A short title for a new conversation: the first line of its first message.
@@ -349,6 +378,7 @@ mod tests {
                 })
                 .collect(),
             stopped: false,
+            thinking: String::new(),
         }
     }
 
@@ -410,13 +440,25 @@ mod tests {
     }
 
     #[test]
-    fn hides_reasoning_before_the_answer() {
+    fn splits_reasoning_from_the_answer() {
         assert_eq!(
-            visible_text("Draft answer.\n</think>\n\nAnswer."),
-            "Answer."
+            split_thinking("Draft answer.\n</think>\n\nAnswer."),
+            ("Draft answer.".to_string(), "Answer.")
         );
-        assert_eq!(visible_text("<think>still going"), "");
-        assert_eq!(visible_text("Plain answer"), "Plain answer");
+        assert_eq!(
+            split_thinking("<think>still going"),
+            ("still going".to_string(), "")
+        );
+        assert_eq!(
+            split_thinking("Plain answer"),
+            (String::new(), "Plain answer")
+        );
+        let (thinking, text) = split_thinking("<think>a</think> b </think>Answer");
+        assert_eq!((thinking.as_str(), text), ("a b", "Answer"));
+        for (thinking, text) in [("", "Answer"), ("Hmm", ""), ("Hmm", "Answer")] {
+            let joined = join_thinking(thinking, text);
+            assert_eq!(split_thinking(&joined), (thinking.to_string(), text));
+        }
     }
 
     #[test]

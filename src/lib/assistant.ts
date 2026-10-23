@@ -162,6 +162,8 @@ export type Block =
       aside: boolean;
     }
   | { kind: "tools"; key: string; calls: ToolCall[] }
+  /** Reasoning the model wrote before its words or tool calls; folded. */
+  | { kind: "thinking"; key: string; text: string }
   | { kind: "stopped"; key: string }
   | {
       kind: "draft";
@@ -205,6 +207,7 @@ export function threadBlocks(messages: Message[], building: DraftGroup[] = []): 
       });
     }
     if (m.role !== "assistant") continue;
+    if (m.thinking) blocks.push({ kind: "thinking", key: `thinking:${m.id}`, text: m.thinking });
     // Words next to tool calls ("Let me search…") stay in the thread in order; the answer,
     // the turn without calls, is the one that lists its sources.
     if (m.text) {

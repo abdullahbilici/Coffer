@@ -28,7 +28,7 @@ use crate::{
         import_prompt, inputs,
         ollama::{self, Ollama, Phase},
         reply::{self, Io, Prompts},
-        system_prompt, title_from,
+        split_thinking, system_prompt, title_from,
     },
     crypto::{self, VaultKey},
     db::{
@@ -92,10 +92,11 @@ pub struct Sent {
     rename_all_fields = "camelCase"
 )]
 enum AssistantEvent {
-    /// The reply's text so far, before its turn is stored.
+    /// The reply's text so far, before its turn is stored, and the reasoning before it.
     Text {
         conversation_id: i64,
         text: String,
+        thinking: String,
     },
     /// Where the model call in progress is: loading the model, reading, writing.
     Phase {
@@ -438,9 +439,11 @@ fn reply(app: &AppHandle, id: i64, cancel: &Arc<AtomicBool>) -> AppResult<()> {
             unlocked: &|| history_key(&state).is_ok(),
             today: &today,
             on_text: &mut |text| {
+                let (thinking, text) = split_thinking(text);
                 emit(AssistantEvent::Text {
                     conversation_id: id,
                     text: text.to_string(),
+                    thinking,
                 })
             },
             save: &mut |turn| {

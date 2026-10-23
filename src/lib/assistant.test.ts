@@ -230,3 +230,29 @@ describe("threadBlocks while an import runs", () => {
     );
   });
 });
+
+describe("threadBlocks with reasoning", () => {
+  it("puts a turn's thinking before its words and tool calls", () => {
+    const messages: Message[] = [
+      { id: 1, createdAt: 0, role: "user", text: "q" },
+      {
+        id: 2,
+        createdAt: 0,
+        role: "assistant",
+        text: "Let me look.",
+        thinking: "The user wants…",
+        toolCalls: [{ id: "a", name: "search", arguments: {} }],
+        stopped: false,
+      },
+      { id: 3, createdAt: 0, role: "tool", callId: "a", name: "search", result: "" },
+      { id: 4, createdAt: 0, role: "assistant", text: "Here.", toolCalls: [], stopped: false },
+    ];
+    expect(threadBlocks(messages).map((b) => b.key)).toEqual([
+      "user:1",
+      "thinking:2",
+      "reply:2",
+      "tools:2",
+      "reply:4",
+    ]);
+  });
+});

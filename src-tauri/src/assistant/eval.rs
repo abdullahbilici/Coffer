@@ -32,7 +32,7 @@ use super::{
     import_prompt,
     ollama::Ollama,
     reply::{self, Io, Prompts},
-    system_prompt, visible_text,
+    split_thinking, system_prompt,
 };
 use crate::{
     commands::sealing::{open_with, seal_inline_with, seal_with},
@@ -876,7 +876,7 @@ impl Model for Traced<'_> {
         let started = Instant::now();
         let reply = self.model.chat(request, on_text);
         if let Ok(r) = &reply {
-            *self.last.borrow_mut() = visible_text(&r.text).trim().to_string();
+            *self.last.borrow_mut() = split_thinking(&r.text).1.trim().to_string();
         }
         if let Ok(mut file) = self.trace.lock() {
             let _ = match &reply {
