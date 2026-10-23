@@ -211,11 +211,7 @@ fn import(
                 stopped: true,
             });
         }
-        let numbered: Vec<String> = range
-            .clone()
-            .map(|i| format!("{}: {}", i + 1, lines[i]))
-            .collect();
-        let numbered = numbered.join("\n");
+        let numbered = blocks(&lines, range.clone());
         let mut prompt = String::new();
         if !instruction.is_empty() {
             prompt.push_str(&format!("The user says: {instruction}\n\n"));
@@ -291,6 +287,27 @@ fn import(
     Ok(())
 }
 
+/// Numbered lines grouped into the blocks the text has (runs between blank lines), so a
+/// heading visibly belongs to the lines under it.
+fn blocks(lines: &[&str], range: Range<usize>) -> String {
+    let mut out = String::new();
+    let mut open = false;
+    let mut n = 0;
+    for i in range {
+        if lines[i].trim().is_empty() {
+            open = false;
+            continue;
+        }
+        if !open {
+            n += 1;
+            out.push_str(&format!("{}Block {n}:\n", if n > 1 { "\n" } else { "" }));
+            open = true;
+        }
+        out.push_str(&format!("{}: {}\n", i + 1, lines[i]));
+    }
+    out.trim_end().to_string()
+}
+
 /// Line ranges of about `CHUNK_CHARS` each, cut at blank lines so a block (a project heading
 /// and what follows it) stays whole; a block without blank lines is cut when twice as long.
 fn chunks(lines: &[&str]) -> Vec<Range<usize>> {
@@ -331,6 +348,15 @@ mod tests {
         assistant::{Reply, Request, ToolCall},
         db::{items, open_in_memory, projects},
     };
+
+    #[test]
+    fn numbers_lines_by_block() {
+        let lines = ["## Acme", "key: [u1]", "", "", "pin 42", "other"];
+        assert_eq!(
+            blocks(&lines, 0..lines.len()),
+            "Block 1:\n1: ## Acme\n2: key: [u1]\n\nBlock 2:\n5: pin 42\n6: other"
+        );
+    }
 
     #[test]
     fn chunks_keep_blocks_whole() {

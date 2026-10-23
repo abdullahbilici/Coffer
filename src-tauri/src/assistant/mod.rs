@@ -177,6 +177,9 @@ questions or describe a plan: the user reviews everything as a draft afterwards.
 - One note per account, service or environment (prod and staging are separate notes). Its \
 fields are the values of that account, each with a short label (Password, API key, Host, User) \
 and the handle as the value, e.g. \"[u3]\".
+- The lines come in blocks. A heading at the top of a block (a name alone on its line, \
+\"## Name\", \"[Name]\", \"Name:\") names the project of that block only; never carry it \
+into the next block, and keep the project name out of note titles.
 - Use the project the text puts a value under. The same project appears under different \
 spellings and with suffixes (\"Name\", \"name projesi\", \"NAME işleri\"): use one clean \
 name, and when the vault has the project already, its exact name. Accounts with no project \

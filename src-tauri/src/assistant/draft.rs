@@ -1018,6 +1018,9 @@ impl Writer<'_, '_> {
     /// A project to put something in: an existing one, or one drafted now.
     fn project_or_new(&mut self, text: &str) -> AppResult<Ref> {
         if let Some(id) = self.ws.find_project(text)? {
+            if let Ref::New(i) = id {
+                self.better_name(i, text.trim());
+            }
             return Ok(id);
         }
         let name = text.trim();
@@ -1029,6 +1032,33 @@ impl Writer<'_, '_> {
         });
         self.notes.push(format!("Drafted new project \"{name}\"."));
         Ok(Ref::New(i))
+    }
+
+    /// A project this draft creates takes a later, more telling name for it: "acme işleri"
+    /// drafted first becomes "Acme Shop" once the text calls it that.
+    fn better_name(&mut self, op: usize, name: &str) {
+        let Some(Op::CreateProject { name: old }) = self.draft.ops.get(op) else {
+            return;
+        };
+        let noise = |n: &str| {
+            fields::normalize(n)
+                .split(' ')
+                .filter(|w| NAME_NOISE.contains(w) || w.ends_with("leri") || w.ends_with("ları"))
+                .count()
+        };
+        let shouted = |n: &str| n.chars().any(char::is_lowercase);
+        let better = name_words(name).len() > name_words(old).len()
+            || noise(name) < noise(old)
+            || (shouted(name) && !shouted(old));
+        if better && name.chars().count() <= MAX_NAME {
+            let name = name.to_string();
+            if let Some(Op::CreateProject { name: old }) = self.draft.ops.get_mut(op) {
+                *old = name.clone();
+            }
+            if let Some(p) = self.ws.projects.iter_mut().find(|p| p.id == Ref::New(op)) {
+                p.name = name;
+            }
+        }
     }
 
     /// A folder path in `project`, drafting the folders it lacks.
@@ -1119,9 +1149,10 @@ impl Writer<'_, '_> {
     fn field(&self, raw: &Value) -> AppResult<Field> {
         let label = name_arg(raw, "label")?;
         let value = self.value(raw.get("value"))?;
+        // A label that names a secret wins over the model's flag: a password is never plain.
         let secret = match &value {
             Val::Secret(_) => true,
-            _ => raw.get("secret").and_then(Value::as_bool).unwrap_or(true),
+            _ => raw.get("secret").and_then(Value::as_bool).unwrap_or(true) || names_secret(&label),
         };
         Ok(Field {
             label,
@@ -1599,6 +1630,29 @@ impl Writer<'_, '_> {
         });
         Ok(format!("Drafted cancelling payment {id} from {date}."))
     }
+}
+
+/// Labels that always mean a secret, in English and Turkish.
+fn names_secret(label: &str) -> bool {
+    const PARTS: [&str; 12] = [
+        "password",
+        "passwd",
+        "şifre",
+        "sifre",
+        "parola",
+        "secret",
+        "token",
+        "private",
+        "api key",
+        "apikey",
+        "recovery",
+        "yedek kod",
+    ];
+    const WORDS: [&str; 8] = [
+        "pin", "otp", "2fa", "code", "codes", "kod", "kodu", "kodları",
+    ];
+    let label = fields::normalize(label);
+    PARTS.iter().any(|p| label.contains(p)) || label.split(' ').any(|w| WORDS.contains(&w))
 }
 
 fn field_labels(list: &[Field]) -> String {
@@ -2556,6 +2610,36 @@ mod tests {
     }
 
     #[test]
+    fn labels_that_name_a_secret_keep_it_secret() {
+        for label in [
+            "Password",
+            "DB şifresi",
+            "API key",
+            "Auth token",
+            "PIN",
+            "2FA yedek kodları",
+        ] {
+            assert!(names_secret(label), "{label}");
+        }
+        for label in [
+            "User",
+            "Host",
+            "Access key ID",
+            "Publishable key",
+            "URL",
+            "Postcode",
+        ] {
+            assert!(!names_secret(label), "{label}");
+        }
+        let mut run = Run::new("blog admin password Kedi-Mavi-42");
+        run.call(
+            "add_field",
+            json!({ "note": 2, "label": "Password", "value": "u1", "secret": false }),
+        );
+        assert!(matches!(&run.draft.ops[0], Op::AddField { field, .. } if field.secret));
+    }
+
+    #[test]
     fn typed_values_are_refused() {
         let mut run = Run::new("password is Kedi-Mavi-42 for the blog admin");
         let result = run.call(
@@ -2721,6 +2805,18 @@ mod tests {
             json!({ "note": 1, "label": "Password", "value": "[u1]" }),
         );
         assert!(update.starts_with("Error: that value is used"), "{update}");
+    }
+
+    #[test]
+    fn drafted_projects_take_the_more_telling_name() {
+        let mut run = Run::new("toros keys k1x9z8y7w6 and k2x9z8y7w6");
+        let note = |title: &str, project: &str, value: &str| json!({ "project": project, "title": title, "fields": [{ "label": "Key", "value": value, "secret": true }] });
+        run.call("create_note", note("A", "toros işleri", "u1"));
+        run.call("create_note", note("B", "Toros Otomotiv", "u2"));
+        let groups = run.view();
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].project, "Toros Otomotiv");
+        assert_eq!(groups[0].entries.len(), 2);
     }
 
     #[test]
