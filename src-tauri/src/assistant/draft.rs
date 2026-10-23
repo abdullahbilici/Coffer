@@ -583,7 +583,6 @@ impl Workspace {
             None => Err(bad(format!("there is no note {id}"))),
         }
     }
-
 }
 
 /// Whether `note` holds `value` already, in the vault or through this draft. The same value in
@@ -592,12 +591,17 @@ fn note_holds(ctx: &Ctx, ops: &[Op], note: Ref, value: &Val) -> bool {
     let text = resolve_known(ctx.inputs, value);
     if let (Ref::Id(id), Some(text)) = (note, &text)
         && text.chars().count() >= 4
-        && ctx.stored.get(&id).is_some_and(|values| values.contains(text))
+        && ctx
+            .stored
+            .get(&id)
+            .is_some_and(|values| values.contains(text))
     {
         return true;
     }
     ops.iter().enumerate().any(|(i, op)| {
-        op_uses(op, note, i, &|v| same_value(ctx.inputs, v, value, text.as_deref()))
+        op_uses(op, note, i, &|v| {
+            same_value(ctx.inputs, v, value, text.as_deref())
+        })
     })
 }
 
@@ -616,7 +620,9 @@ fn op_uses(op: &Op, note: Ref, index: usize, is: &dyn Fn(&Val) -> bool) -> bool 
             note == Ref::New(index) && fields.iter().any(|f| is(&f.value))
         }
         Op::AddField { note: id, field } => note == Ref::Id(*id) && is(&field.value),
-        Op::UpdateField { note: id, value, .. } => note == Ref::Id(*id) && is(value),
+        Op::UpdateField {
+            note: id, value, ..
+        } => note == Ref::Id(*id) && is(value),
         _ => false,
     }
 }
@@ -1250,8 +1256,7 @@ impl Writer<'_, '_> {
                     resolve_known(self.ctx.inputs, &field.value).as_deref(),
                 )
             });
-            if twice
-                || twin.is_some_and(|t| note_holds(self.ctx, &self.draft.ops, t, &field.value))
+            if twice || twin.is_some_and(|t| note_holds(self.ctx, &self.draft.ops, t, &field.value))
             {
                 self.notes.push(format!(
                     "Skipped {}: \"{title}\" has that value already.",
@@ -1355,7 +1360,9 @@ impl Writer<'_, '_> {
             )));
         }
         if note_holds(self.ctx, &self.draft.ops, Ref::Id(note), &field.value) {
-            return Ok(format!("Skipped: note {note} ({title}) has that value already."));
+            return Ok(format!(
+                "Skipped: note {note} ({title}) has that value already."
+            ));
         }
         let label = field.label.clone();
         self.push(Op::AddField { note, field });

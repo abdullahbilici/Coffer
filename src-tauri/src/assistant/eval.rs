@@ -974,13 +974,17 @@ fn import_task(model: &Traced, n: usize, seed_value: u64) -> Value {
                 .flat_map(move |n| n.fields.iter().map(move |f| (p, n, f)))
         })
         .collect();
-    let (shared_truth, truth): (Vec<_>, Vec<_>) =
-        all.into_iter().partition(|(_, _, f)| shared.contains(&f.value));
+    let (shared_truth, truth): (Vec<_>, Vec<_>) = all
+        .into_iter()
+        .partition(|(_, _, f)| shared.contains(&f.value));
     // Every account holding a shared value should end up with it.
     let shared_kept: usize = shared
         .iter()
         .map(|v| {
-            let uses = shared_truth.iter().filter(|(_, _, f)| &f.value == v).count();
+            let uses = shared_truth
+                .iter()
+                .filter(|(_, _, f)| &f.value == v)
+                .count();
             let notes: HashSet<i64> = stored
                 .get(v)
                 .map(|s| s.iter().map(|s| s.note).collect())
