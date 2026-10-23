@@ -90,9 +90,9 @@
   flex: 1;
 }
 
-/* Text fields in a row's control slot (assistant server, model, key). */
+/* Text fields in a row's control slot, as wide as the selects around them. */
 .wideField {
-  width: 260px;
+  width: 220px;
 }
 
 /* Free text in the system font rather than the markup editor's monospace. */

@@ -143,10 +143,12 @@
   animation: fade var(--duration-base) var(--ease-out);
 }
 
+/* Content fades out where it meets the composer instead of being cut (only the alpha counts). */
 .scroll {
   flex: 1;
   min-height: 0;
   overflow-y: scroll;
+  mask-image: linear-gradient(to bottom, var(--color-bg) calc(100% - var(--space-6)), transparent);
 }
 
 .messages {
