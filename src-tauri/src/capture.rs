@@ -208,10 +208,15 @@ pub fn open_in_main(app: &AppHandle, conversation_id: i64) -> AppResult<()> {
     Ok(())
 }
 
-/// Fits the window to the panel's height. Keeps the top edge where it is.
+/// Fits the window to the panel's height. AppKit keeps the bottom edge of a resized window,
+/// so the top is put back: the panel grows and shrinks downwards.
 pub fn fit(window: &WebviewWindow, height: f64) {
     let height = height.clamp(HEIGHT / 2.0, 900.0);
+    let top = window.outer_position();
     let _ = window.set_size(LogicalSize::new(WIDTH, height));
+    if let Ok(top) = top {
+        let _ = window.set_position(top);
+    }
 }
 
 #[cfg(test)]
