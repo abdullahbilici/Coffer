@@ -30,7 +30,12 @@ const id = (value: unknown): number | null => {
 };
 
 /** A calm one-line description of a tool call, e.g. "Searched for aws". */
-export function toolLabel(call: ToolCall, tree: Tree): string {
+export function toolLabel(call: ToolCall, tree: Tree, result?: string): string {
+  const label = describe(call, tree);
+  return result?.startsWith("Error:") ? label.replace(/^Drafted /, "Couldn't draft ") : label;
+}
+
+function describe(call: ToolCall, tree: Tree): string {
   const args = call.arguments ?? {};
   const withName = (label: string, name: unknown) => {
     const value = text(name);
@@ -121,7 +126,11 @@ export function threadBlocks(messages: Message[]): Block[] {
       blocks.push({ kind: "draft", key: `draft:${m.id}`, id: m.id, groups, status });
     }
     if (m.role !== "assistant") continue;
-    if (m.text) blocks.push({ kind: "reply", key: `reply:${m.id}`, text: m.text });
+    // Words next to tool calls are the model thinking aloud ("Let me search…", or a summary
+    // written before the tools ran); the answer is the turn without calls.
+    if (m.text && m.toolCalls.length === 0) {
+      blocks.push({ kind: "reply", key: `reply:${m.id}`, text: m.text });
+    }
     if (m.toolCalls.length > 0) {
       const last = blocks.at(-1);
       if (last?.kind === "tools") last.calls = [...last.calls, ...m.toolCalls];

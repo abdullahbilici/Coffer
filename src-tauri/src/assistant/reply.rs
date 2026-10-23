@@ -102,18 +102,30 @@ pub fn reply(model: &dyn Model, prompts: &Prompts, history: &[Turn], io: Io) -> 
             if let Value::Array(list) = &mut specs {
                 list.extend(draft::specs());
             }
-            agent::respond(
-                model,
-                prompts.chat,
-                &specs,
-                &mut turns,
-                Hooks {
-                    on_text,
-                    save: &mut *save,
-                    run_tool: &mut |call| run_tool(&mut draft, &call.name, &call.arguments),
-                    cancelled,
-                },
-            )
+            let mut respond = |turns: &mut Vec<Turn>, draft: &mut Draft| {
+                agent::respond(
+                    model,
+                    prompts.chat,
+                    &specs,
+                    turns,
+                    Hooks {
+                        on_text: &mut *on_text,
+                        save: &mut *save,
+                        run_tool: &mut |call| run_tool(draft, &call.name, &call.arguments),
+                        cancelled,
+                    },
+                )
+            };
+            respond(&mut turns, &mut draft).and_then(|()| {
+                // Small models sometimes say they drafted a change without calling a tool:
+                // tell it once, as the model's own context only.
+                if draft.ops.is_empty() && !cancelled() && claims_a_draft(&turns) {
+                    turns.push(Turn::user(NOTHING_DRAFTED));
+                    respond(&mut turns, &mut draft)
+                } else {
+                    Ok(())
+                }
+            })
         }
         Some((instruction, paste)) => import(
             model,
@@ -156,6 +168,21 @@ pub fn reply(model: &dyn Model, prompts: &Prompts, history: &[Turn], io: Io) -> 
         })?;
     }
     result
+}
+
+const NOTHING_DRAFTED: &str = "Nothing was drafted: no write tool was called. Call the write \
+tool now if a change is needed, without asking.";
+
+const NO_CALL: &str = "Call add_notes now with every note from these lines. Do not ask or \
+explain.";
+
+/// Whether the reply's last words speak of a draft.
+fn claims_a_draft(turns: &[Turn]) -> bool {
+    let Some(Turn::Assistant { text, .. }) = turns.last() else {
+        return false;
+    };
+    let text = text.to_lowercase();
+    ["draft", "taslak"].iter().any(|w| text.contains(w))
 }
 
 type RunTool<'a> = dyn FnMut(&mut Draft, &str, &Value) -> AppResult<String> + 'a;
@@ -230,18 +257,28 @@ fn import(
             }),
             _ => Ok(()),
         };
-        agent::respond(
-            model,
-            system,
-            &specs,
-            &mut local,
-            Hooks {
-                on_text: &mut |_| {},
-                save: &mut keep,
-                run_tool: &mut |call| run_tool(draft, &call.name, &call.arguments),
-                cancelled,
-            },
-        )?;
+        // A chunk whose answer calls no tool (it asked or explained instead) gets one reminder.
+        for attempt in 0..2 {
+            if attempt == 1 {
+                let called = local.iter().any(|t| matches!(t, Turn::Tool { .. }));
+                if called || cancelled() {
+                    break;
+                }
+                local.push(Turn::user(NO_CALL));
+            }
+            agent::respond(
+                model,
+                system,
+                &specs,
+                &mut local,
+                Hooks {
+                    on_text: &mut |_| {},
+                    save: &mut keep,
+                    run_tool: &mut |call| run_tool(draft, &call.name, &call.arguments),
+                    cancelled,
+                },
+            )?;
+        }
         any = true;
     }
     if any && draft.ops.is_empty() {

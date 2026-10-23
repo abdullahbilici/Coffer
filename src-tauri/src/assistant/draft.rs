@@ -580,9 +580,7 @@ impl Workspace {
 
     /// Where a value is stored already: a note of the vault, or one this draft creates.
     fn stored_in(&self, ctx: &Ctx, ops: &[Op], value: &Val) -> Option<String> {
-        if let Val::Input(n) = value
-            && ops.iter().any(|op| op_uses_input(op, *n))
-        {
+        if uses_value(ctx.inputs, ops, value) {
             return Some("already in this draft".to_string());
         }
         let text = resolve_known(ctx.inputs, value)?;
@@ -595,8 +593,19 @@ impl Workspace {
     }
 }
 
-fn op_uses_input(op: &Op, n: usize) -> bool {
-    let is = |v: &Val| *v == Val::Input(n);
+/// Whether a draft stores `value` somewhere already, given as a handle or written out.
+fn uses_value(inputs: &Inputs, ops: &[Op], value: &Val) -> bool {
+    let Some(text) = resolve_known(inputs, value) else {
+        return ops.iter().any(|op| op_uses(op, &|v| v == value));
+    };
+    ops.iter().any(|op| {
+        op_uses(op, &|v| {
+            resolve_known(inputs, v).as_deref() == Some(text.as_str())
+        })
+    })
+}
+
+fn op_uses(op: &Op, is: &dyn Fn(&Val) -> bool) -> bool {
     match op {
         Op::CreateNote { fields, .. } => fields.iter().any(|f| is(&f.value)),
         Op::AddField { field, .. } => is(&field.value),
@@ -1320,12 +1329,10 @@ impl Writer<'_, '_> {
             Val::Secret(_) => Some(true),
             _ => args.get("secret").and_then(Value::as_bool),
         };
-        if let Val::Input(n) = value
-            && self.draft.ops.iter().any(|op| op_uses_input(op, n))
-        {
-            return Err(bad(format!(
-                "[u{n}] is used in this draft already; each value goes to one place"
-            )));
+        if uses_value(self.ctx.inputs, &self.draft.ops, &value) {
+            return Err(bad(
+                "that value is used in this draft already; each value goes to one place",
+            ));
         }
         if let Some(text) = resolve_known(self.ctx.inputs, &value)
             && fields::value_of(current) == Some(text.as_str())
@@ -1410,11 +1417,24 @@ impl Writer<'_, '_> {
         let current = self.ws.note(Ref::Id(note)).expect("checked");
         let (from_project, from_folder) = (current.project, current.folder);
         let title = current.title.clone();
+        let mut folder_text = opt_str(args, "folder").map(str::to_string);
         let project = match opt_str(args, "project") {
+            // A folder of the note's project given as the project: move into that folder.
+            Some(text)
+                if folder_text.is_none()
+                    && self.ws.find_project(text).ok().flatten().is_none()
+                    && self
+                        .ws
+                        .folder_path_parts(from_project, text)
+                        .is_ok_and(|(_, missing)| missing.is_empty()) =>
+            {
+                folder_text = Some(text.to_string());
+                from_project
+            }
             Some(text) => self.ws.existing_project(text)?,
             None => from_project,
         };
-        let folder = self.folder_or_new(project, opt_str(args, "folder"))?;
+        let folder = self.folder_or_new(project, folder_text.as_deref())?;
         if project == from_project && folder == from_folder {
             return Ok(format!(
                 "Note {note} is in {} already.",
@@ -1864,10 +1884,19 @@ pub fn view(ctx: &Ctx, ops: &[Op]) -> AppResult<Vec<Group>> {
                 folder,
             } => {
                 let old = before.note(Ref::Id(*note));
+                // Within one project the group names it already: only folders show.
+                let same = old.is_some_and(|n| n.project == *project);
+                let place = |ws: &Workspace, project: Ref, folder: Option<Ref>| match ws
+                    .folder_path(folder)
+                {
+                    path if same && !path.is_empty() => path,
+                    _ if same => "Project root".to_string(),
+                    _ => ws.place(project, folder),
+                };
                 let from = old
-                    .map(|n| before.place(n.project, n.folder))
+                    .map(|n| place(&before, n.project, n.folder))
                     .unwrap_or_default();
-                let to = after.place(*project, *folder);
+                let to = place(&after, *project, *folder);
                 (
                     old.map(|n| n.project),
                     entry(
@@ -2669,6 +2698,45 @@ mod tests {
         let payments = payments::list(&run.conn).unwrap();
         assert_eq!(payments.len(), 2);
         assert_eq!(payments[0].prices.last().unwrap().amount, 1499);
+    }
+
+    #[test]
+    fn a_value_goes_to_one_place_however_it_is_given() {
+        let mut run = Run::new("blog admin pin 4242 and token tok_9a8b7c6d5e");
+        run.call(
+            "add_field",
+            json!({ "note": 2, "label": "PIN", "value": "4242", "secret": true }),
+        );
+        let again = run.call(
+            "create_note",
+            json!({ "project": "Blog", "title": "Locker", "fields": [{ "label": "Code", "value": "4242", "secret": true }] }),
+        );
+        assert!(again.contains("already in this draft"), "{again}");
+        run.call(
+            "add_field",
+            json!({ "note": 2, "label": "Token", "value": "u1", "secret": true }),
+        );
+        let update = run.call(
+            "update_field",
+            json!({ "note": 1, "label": "Password", "value": "[u1]" }),
+        );
+        assert!(update.starts_with("Error: that value is used"), "{update}");
+    }
+
+    #[test]
+    fn a_folder_given_as_the_project_is_the_folder() {
+        let mut run = Run::new("move it");
+        run.call(
+            "create_folder",
+            json!({ "project": "Acme Shop", "name": "Billing" }),
+        );
+        let result = run.call("move_note", json!({ "note": 1, "project": "Billing" }));
+        assert!(result.contains("to Acme Shop / Billing"), "{result}");
+        let groups = run.view();
+        assert_eq!(
+            groups[0].entries[1].detail.as_deref(),
+            Some("Infra → Billing")
+        );
     }
 
     #[test]

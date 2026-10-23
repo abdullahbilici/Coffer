@@ -235,7 +235,7 @@ function ToolRow({ call, result, pending, tree }: ToolRowProps) {
         onClick={() => setOpen((o) => !o)}
       >
         <Icon size={14} strokeWidth={1.75} className={styles.toolIcon} />
-        <span className={styles.toolLabel}>{toolLabel(call, tree)}</span>
+        <span className={styles.toolLabel}>{toolLabel(call, tree, result)}</span>
         {done && (
           <ChevronRight
             size={12}

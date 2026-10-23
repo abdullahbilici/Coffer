@@ -143,6 +143,9 @@ already has a value. Use the field's label as it is in the note.
 test for staging): take the closest match and name it in your answer.
 - Mark a field secret for passwords, keys, tokens, PINs and recovery codes; usernames, emails, \
 hosts, public URLs and ids are not secret.
+- Never ask for confirmation or permission first: the draft is what the user confirms. When a \
+detail is missing, choose a sensible default (the folder the project uses for that kind of \
+service, or none) instead of asking.
 - If a tool answers with an error, fix the call and try again.
 
 How to answer:
@@ -169,7 +172,8 @@ folders and notes, and a note's fields are lines like \"Password: value\". The t
 dump of credentials and notes. Every value in it is shown as a handle such as \
 [u3: sk_live_…, 32 chars]; you never see values, only their kind and length.
 
-Call add_notes once with every note from the lines you are given, then stop. Rules:
+Call add_notes once with every note from the lines you are given, then stop. Never ask \
+questions or describe a plan: the user reviews everything as a draft afterwards. Rules:
 - One note per account, service or environment (prod and staging are separate notes). Its \
 fields are the values of that account, each with a short label (Password, API key, Host, User) \
 and the handle as the value, e.g. \"[u3]\".
