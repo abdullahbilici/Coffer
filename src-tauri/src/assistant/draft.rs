@@ -170,14 +170,17 @@ pub struct Ctx<'a> {
     pub conn: &'a Connection,
     pub today: &'a str,
     pub inputs: &'a Inputs,
-    /// Values already in the vault (secrets included), with the note holding each, so a draft
-    /// skips what is stored. Built once per reply by `stored_values`.
-    pub stored: &'a HashMap<String, i64>,
+    /// The field values of each vault note (secrets included), so a draft skips a value the
+    /// note it goes to holds already. Built once per reply by `stored_values`.
+    pub stored: &'a HashMap<i64, HashSet<String>>,
 }
 
-/// Every field value in the vault's notes, decrypted, by the note that holds it. Used only to
-/// leave out values a draft would store twice; none of it reaches the model.
-pub fn stored_values(conn: &Connection, key: Option<&VaultKey>) -> AppResult<HashMap<String, i64>> {
+/// Every field value in the vault's notes, decrypted, by note. Used only to leave out a value a
+/// draft would add twice to the same note; none of it reaches the model.
+pub fn stored_values(
+    conn: &Connection,
+    key: Option<&VaultKey>,
+) -> AppResult<HashMap<i64, HashSet<String>>> {
     let mut stored = HashMap::new();
     for (id, template) in items::templates(conn)? {
         let text = match key {
@@ -189,7 +192,10 @@ pub fn stored_values(conn: &Connection, key: Option<&VaultKey>) -> AppResult<Has
         };
         for line in text.lines() {
             if let Some(value) = fields::value_of(line) {
-                stored.entry(value.to_string()).or_insert(id);
+                stored
+                    .entry(id)
+                    .or_insert_with(HashSet::new)
+                    .insert(value.to_string());
             }
         }
     }
@@ -577,39 +583,46 @@ impl Workspace {
             None => Err(bad(format!("there is no note {id}"))),
         }
     }
-
-    /// Where a value is stored already: a note of the vault, or one this draft creates.
-    fn stored_in(&self, ctx: &Ctx, ops: &[Op], value: &Val) -> Option<String> {
-        if uses_value(ctx.inputs, ops, value) {
-            return Some("already in this draft".to_string());
-        }
-        let text = resolve_known(ctx.inputs, value)?;
-        if text.chars().count() < 4 {
-            return None;
-        }
-        let id = ctx.stored.get(text.as_str())?;
-        let note = self.note(Ref::Id(*id))?;
-        Some(format!("already stored in note {id} ({})", note.title))
-    }
 }
 
-/// Whether a draft stores `value` somewhere already, given as a handle or written out.
-fn uses_value(inputs: &Inputs, ops: &[Op], value: &Val) -> bool {
-    let Some(text) = resolve_known(inputs, value) else {
-        return ops.iter().any(|op| op_uses(op, &|v| v == value));
-    };
-    ops.iter().any(|op| {
-        op_uses(op, &|v| {
-            resolve_known(inputs, v).as_deref() == Some(text.as_str())
+/// Whether `note` holds `value` already, in the vault or through this draft. The same value in
+/// other notes doesn't count: a shared email or a reused password belongs to every account.
+fn note_holds(ctx: &Ctx, ops: &[Op], note: Ref, value: &Val) -> bool {
+    let text = resolve_known(ctx.inputs, value);
+    if let (Ref::Id(id), Some(text)) = (note, &text)
+        && text.chars().count() >= 4
+        && ctx
+            .stored
+            .get(&id)
+            .is_some_and(|values| values.contains(text))
+    {
+        return true;
+    }
+    ops.iter().enumerate().any(|(i, op)| {
+        op_uses(op, note, i, &|v| {
+            same_value(ctx.inputs, v, value, text.as_deref())
         })
     })
 }
 
-fn op_uses(op: &Op, is: &dyn Fn(&Val) -> bool) -> bool {
+/// Whether two values are the same, given as handles or written out.
+fn same_value(inputs: &Inputs, a: &Val, b: &Val, b_text: Option<&str>) -> bool {
+    match b_text {
+        Some(text) => resolve_known(inputs, a).as_deref() == Some(text),
+        None => a == b,
+    }
+}
+
+/// Whether `op` (at `index` in the draft) puts a value matching `is` in `note`.
+fn op_uses(op: &Op, note: Ref, index: usize, is: &dyn Fn(&Val) -> bool) -> bool {
     match op {
-        Op::CreateNote { fields, .. } => fields.iter().any(|f| is(&f.value)),
-        Op::AddField { field, .. } => is(&field.value),
-        Op::UpdateField { value, .. } => is(value),
+        Op::CreateNote { fields, .. } => {
+            note == Ref::New(index) && fields.iter().any(|f| is(&f.value))
+        }
+        Op::AddField { note: id, field } => note == Ref::Id(*id) && is(&field.value),
+        Op::UpdateField {
+            note: id, value, ..
+        } => note == Ref::Id(*id) && is(value),
         _ => false,
     }
 }
@@ -1219,14 +1232,6 @@ impl Writer<'_, '_> {
         let project = self.project_or_new(project_text)?;
         let folder = self.folder_or_new(project, opt_str(args, "folder"))?;
 
-        // Leave out values the vault or this draft holds already.
-        let mut kept = Vec::new();
-        for field in list {
-            match self.ws.stored_in(self.ctx, &self.draft.ops, &field.value) {
-                Some(why) => self.notes.push(format!("Skipped {}: {why}.", field.label)),
-                None => kept.push(field),
-            }
-        }
         let place = self.ws.place(project, folder);
         // A note of the same title in the same place gets the new fields instead of a twin.
         let twin = self
@@ -1240,6 +1245,27 @@ impl Writer<'_, '_> {
                     && fields::normalize(&n.title) == fields::normalize(&title)
             })
             .map(|n| n.id);
+        // Leave out values the note holds already; other notes may hold the same value.
+        let mut kept: Vec<Field> = Vec::new();
+        for field in list {
+            let twice = kept.iter().any(|k| {
+                same_value(
+                    self.ctx.inputs,
+                    &k.value,
+                    &field.value,
+                    resolve_known(self.ctx.inputs, &field.value).as_deref(),
+                )
+            });
+            if twice || twin.is_some_and(|t| note_holds(self.ctx, &self.draft.ops, t, &field.value))
+            {
+                self.notes.push(format!(
+                    "Skipped {}: \"{title}\" has that value already.",
+                    field.label
+                ));
+            } else {
+                kept.push(field);
+            }
+        }
         match twin {
             Some(Ref::Id(id)) if !kept.is_empty() => {
                 let labels = self.add_to_existing(id, kept)?;
@@ -1333,8 +1359,10 @@ impl Writer<'_, '_> {
                 field.label
             )));
         }
-        if let Some(why) = self.ws.stored_in(self.ctx, &self.draft.ops, &field.value) {
-            return Ok(format!("Skipped: {why}."));
+        if note_holds(self.ctx, &self.draft.ops, Ref::Id(note), &field.value) {
+            return Ok(format!(
+                "Skipped: note {note} ({title}) has that value already."
+            ));
         }
         let label = field.label.clone();
         self.push(Op::AddField { note, field });
@@ -1360,11 +1388,6 @@ impl Writer<'_, '_> {
             Val::Secret(_) => Some(true),
             _ => args.get("secret").and_then(Value::as_bool),
         };
-        if uses_value(self.ctx.inputs, &self.draft.ops, &value) {
-            return Err(bad(
-                "that value is used in this draft already; each value goes to one place",
-            ));
-        }
         if let Some(text) = resolve_known(self.ctx.inputs, &value)
             && fields::value_of(current) == Some(text.as_str())
         {
@@ -2517,7 +2540,7 @@ mod tests {
     struct Run {
         conn: Connection,
         inputs: Inputs,
-        stored: HashMap<String, i64>,
+        stored: HashMap<i64, HashSet<String>>,
         draft: Draft,
     }
 
@@ -2689,28 +2712,78 @@ mod tests {
     }
 
     #[test]
-    fn stored_values_are_skipped() {
+    fn values_are_skipped_only_in_the_note_holding_them() {
         let mut run = Run::new("admin of blog: me@blog.example pass hunter2-old");
+        let fields = json!([
+            { "label": "Email", "value": "u1", "secret": false },
+            { "label": "Password", "value": "u2", "secret": true },
+        ]);
         let result = run.call(
             "create_note",
-            json!({
-                "project": "Blog",
-                "title": "Admin",
-                "fields": [
-                    { "label": "Email", "value": "u1", "secret": false },
-                    { "label": "Password", "value": "u2", "secret": true },
-                ],
-            }),
+            json!({ "project": "Blog", "title": "Admin", "fields": fields }),
         );
         assert!(
-            result.contains("Skipped Email: already stored in note 2"),
+            result.contains("Skipped Email: \"Admin\" has that value already"),
             "{result}"
         );
-        assert!(
-            result.contains("Skipped Password: already stored in note 1"),
-            "{result}"
+        assert!(!result.contains("Skipped Password"), "{result}");
+        assert!(matches!(run.draft.ops[..], [Op::AddField { note: 2, .. }]));
+        let other = run.call(
+            "create_note",
+            json!({ "project": "Blog", "title": "Backup admin", "fields": fields }),
         );
-        assert!(run.draft.ops.is_empty());
+        assert!(!other.contains("Skipped"), "{other}");
+        assert!(matches!(&run.draft.ops[1], Op::CreateNote { fields, .. } if fields.len() == 2));
+    }
+
+    #[test]
+    fn accounts_sharing_an_email_and_a_password_keep_both() {
+        let mut run = Run::new("github and gitlab: team@acme.example pass Sh4red-pass!");
+        for title in ["GitHub", "GitLab"] {
+            let result = run.call(
+                "create_note",
+                json!({
+                    "project": "Acme Shop",
+                    "title": title,
+                    "fields": [
+                        { "label": "Email", "value": "u1", "secret": false },
+                        { "label": "Password", "value": "u2", "secret": true },
+                    ],
+                }),
+            );
+            assert!(!result.contains("Skipped"), "{result}");
+        }
+        run.apply();
+        for id in [3, 4] {
+            assert_eq!(
+                run.body(id),
+                "Email: `team@acme.example`\nPassword: `!Sh4red-pass!!`"
+            );
+        }
+    }
+
+    #[test]
+    fn an_import_keeps_a_shared_email_in_every_account() {
+        let mut run = Run::new("aws stripe vercel sentry, all on ops@acme.example");
+        let notes: Vec<Value> = ["AWS", "Stripe", "Vercel", "Sentry"]
+            .iter()
+            .map(|title| {
+                json!({
+                    "project": "Acme Shop",
+                    "title": title,
+                    "fields": [{ "label": "Email", "value": "u1", "secret": false }],
+                })
+            })
+            .collect();
+        let result = run.call("add_notes", json!({ "notes": notes }));
+        assert!(!result.contains("Skipped"), "{result}");
+        let with_email = run
+            .draft
+            .ops
+            .iter()
+            .filter(|op| matches!(op, Op::CreateNote { fields, .. } if fields.len() == 1))
+            .count();
+        assert_eq!(with_email, 4, "{result}");
     }
 
     #[test]
@@ -2785,26 +2858,36 @@ mod tests {
     }
 
     #[test]
-    fn a_value_goes_to_one_place_however_it_is_given() {
+    fn a_value_goes_once_into_a_note_however_it_is_given() {
         let mut run = Run::new("blog admin pin 4242 and token tok_9a8b7c6d5e");
         run.call(
             "add_field",
             json!({ "note": 2, "label": "PIN", "value": "4242", "secret": true }),
         );
-        let again = run.call(
-            "create_note",
-            json!({ "project": "Blog", "title": "Locker", "fields": [{ "label": "Code", "value": "4242", "secret": true }] }),
-        );
-        assert!(again.contains("already in this draft"), "{again}");
         run.call(
             "add_field",
             json!({ "note": 2, "label": "Token", "value": "u1", "secret": true }),
         );
+        let again = run.call(
+            "add_field",
+            json!({ "note": 2, "label": "Code", "value": "4242", "secret": true }),
+        );
+        assert!(again.starts_with("Skipped: note 2"), "{again}");
+        let elsewhere = run.call(
+            "create_note",
+            json!({ "project": "Blog", "title": "Locker", "fields": [{ "label": "Code", "value": "4242", "secret": true }] }),
+        );
+        assert!(!elsewhere.contains("Skipped"), "{elsewhere}");
+        let twice = run.call(
+            "create_note",
+            json!({ "project": "Blog", "title": "Locker", "fields": [{ "label": "PIN", "value": "4242", "secret": true }] }),
+        );
+        assert!(twice.contains("Skipped PIN"), "{twice}");
         let update = run.call(
             "update_field",
             json!({ "note": 1, "label": "Password", "value": "[u1]" }),
         );
-        assert!(update.starts_with("Error: that value is used"), "{update}");
+        assert!(update.starts_with("Drafted new value"), "{update}");
     }
 
     #[test]
