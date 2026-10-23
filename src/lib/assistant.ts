@@ -153,7 +153,14 @@ function describe(call: ToolCall, tree: Tree): string {
 /** What the thread shows, in order. Tool calls in a row form one group, whichever turns made them. */
 export type Block =
   | { kind: "user"; key: string; text: string; paste: string | null }
-  | { kind: "reply"; key: string; text: string; read: Read }
+  | {
+      kind: "reply";
+      key: string;
+      text: string;
+      read: Read;
+      /** Written next to tool calls, on the way to the answer. */
+      aside: boolean;
+    }
   | { kind: "tools"; key: string; calls: ToolCall[] }
   | { kind: "stopped"; key: string }
   | {
@@ -198,10 +205,11 @@ export function threadBlocks(messages: Message[], building: DraftGroup[] = []): 
       });
     }
     if (m.role !== "assistant") continue;
-    // Words next to tool calls are the model thinking aloud ("Let me search…", or a summary
-    // written before the tools ran); the answer is the turn without calls.
-    if (m.text && m.toolCalls.length === 0) {
-      blocks.push({ kind: "reply", key: `reply:${m.id}`, text: m.text, read });
+    // Words next to tool calls ("Let me search…") stay in the thread in order; the answer,
+    // the turn without calls, is the one that lists its sources.
+    if (m.text) {
+      const aside = m.toolCalls.length > 0;
+      blocks.push({ kind: "reply", key: `reply:${m.id}`, text: m.text, read, aside });
     }
     for (const call of m.toolCalls) {
       const args = call.arguments ?? {};

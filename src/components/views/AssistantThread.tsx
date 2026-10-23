@@ -188,7 +188,7 @@ function ThreadBlock({
       );
     case "reply": {
       const { tree, actions } = shared;
-      const list = replySources(block.text, block.read, tree);
+      const list = block.aside ? [] : replySources(block.text, block.read, tree);
       return (
         <AssistantReply
           text={block.text}

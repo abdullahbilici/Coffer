@@ -97,14 +97,16 @@ describe("threadBlocks", () => {
     expect(tools.kind === "tools" && tools.calls.map((c) => c.id)).toEqual(["a", "b"]);
   });
 
-  it("shows pastes and drafts, and only answers without tool calls", () => {
+  it("shows pastes, drafts and the words next to tool calls, in order", () => {
     const messages: Message[] = [
       { id: 1, ...at, role: "user", text: "", paste: "a\nb" },
       { id: 2, ...at, role: "assistant", text: "Drafted!", toolCalls: [call("a")], stopped: false },
       { id: 3, ...at, role: "tool", callId: "a", name: "create_note", result: "ok" },
       { id: 4, ...at, role: "draft", groups: [], status: "pending" },
     ];
-    expect(threadBlocks(messages).map((b) => b.kind)).toEqual(["user", "tools", "draft"]);
+    expect(threadBlocks(messages).map((b) => b.kind)).toEqual(["user", "reply", "tools", "draft"]);
+    const aside = threadBlocks(messages)[1];
+    expect(aside.kind === "reply" && aside.aside).toBe(true);
     const user = threadBlocks(messages)[0];
     expect(user.kind === "user" && user.paste).toBe("a\nb");
   });
