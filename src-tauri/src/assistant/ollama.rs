@@ -12,7 +12,7 @@ use std::{
         mpsc::{self, RecvTimeoutError},
     },
     thread,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use serde::Serialize;
@@ -28,8 +28,6 @@ use crate::error::{AppError, AppResult};
 
 /// How often a waiting reply checks for cancel.
 const CANCEL_POLL: Duration = Duration::from_millis(100);
-/// How often a reply waiting for the model to load asks whether it has.
-const LOAD_POLL: Duration = Duration::from_secs(1);
 /// Longest wait for a quick request (`/api/ps`, unloading): the model server is local.
 const QUICK_TIMEOUT: Duration = Duration::from_secs(2);
 
@@ -39,7 +37,7 @@ const QUICK_TIMEOUT: Duration = Duration::from_secs(2);
 pub enum Phase {
     /// The server is loading the model into memory.
     Loading,
-    /// The model reads the prompt; nothing has streamed yet.
+    /// The model is loaded and reads the prompt; nothing has streamed yet.
     Reading,
     /// The answer streams in.
     Writing,
@@ -312,14 +310,14 @@ impl Model for Ollama {
     /// loading the model or reading the prompt. Dropping the channel ends the reader, which
     /// closes the connection and stops the generation.
     fn chat(&self, request: &Request, on_text: &mut dyn FnMut(&str)) -> AppResult<Reply> {
-        // A model that isn't loaded yet takes a while before anything streams; say so.
-        let mut loading = self.on_phase.is_some() && !self.loaded().unwrap_or(true);
+        // A model that isn't loaded yet takes a while before anything streams; say so. `/api/ps`
+        // lists a model while it is still loading, so loading lasts until the first chunk.
+        let loading = self.on_phase.is_some() && !self.loaded().unwrap_or(true);
         self.phase(if loading {
             Phase::Loading
         } else {
             Phase::Reading
         });
-        let mut asked = Instant::now();
         let mut writing = false;
 
         let url = self.url.clone();
@@ -367,16 +365,7 @@ impl Model for Ollama {
                 Ok(Chunk::Line(line)) => line,
                 Ok(Chunk::End) | Err(RecvTimeoutError::Disconnected) => return Ok(reply),
                 Ok(Chunk::Failed(e)) => return Err(e),
-                Err(RecvTimeoutError::Timeout) => {
-                    if loading && asked.elapsed() >= LOAD_POLL {
-                        asked = Instant::now();
-                        if self.loaded().unwrap_or(false) {
-                            loading = false;
-                            self.phase(Phase::Reading);
-                        }
-                    }
-                    continue;
-                }
+                Err(RecvTimeoutError::Timeout) => continue,
             };
             if !writing {
                 writing = true;
