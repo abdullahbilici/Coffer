@@ -61,11 +61,36 @@ export type Conversation = {
 
 export type ToolCall = { id: string; name: string; arguments: Record<string, unknown> };
 
+/** A value in a draft: the user's own (masked when secret), or a stored secret's handle. */
+export type DraftValue = { text: string; secret: boolean } | { handle: string };
+
+/** Mirrors `assistant::draft::Line`. */
+export type DraftLine = {
+  sign: "add" | "change" | "remove";
+  label: string;
+  value: DraftValue | null;
+};
+
+/** Mirrors `assistant::draft::Entry`. */
+export type DraftEntry = {
+  kind: "project" | "folder" | "note" | "todo" | "payment";
+  action: "add" | "edit" | "rename" | "move" | "delete" | "done" | "cancel";
+  title: string;
+  detail: string | null;
+  lines: DraftLine[];
+};
+
+/** Mirrors `assistant::draft::Group`: the changes to one project. */
+export type DraftGroup = { project: string; new: boolean; entries: DraftEntry[] };
+
+export type DraftStatus = "pending" | "applied" | "discarded";
+
 /** Mirrors `assistant::Turn`. Assistant text may hold secret handles like `[n12.0]`. */
 export type Turn =
-  | { role: "user"; text: string }
+  | { role: "user"; text: string; paste?: string }
   | { role: "assistant"; text: string; toolCalls: ToolCall[]; stopped: boolean }
-  | { role: "tool"; callId: string; name: string; result: string };
+  | { role: "tool"; callId: string; name: string; result: string }
+  | { role: "draft"; groups: DraftGroup[]; status: DraftStatus };
 
 export type Message = Turn & { id: number; createdAt: number };
 
@@ -235,11 +260,18 @@ export const api = {
     invoke<void>("rename_conversation", { id, title }),
   deleteConversation: (id: number) => invoke<void>("delete_conversation", { id }),
   /** Starts a reply in the background; it arrives as `assistant-event`s. */
-  sendMessage: (conversationId: number | null, text: string) =>
+  /** `paste`: text to import with the message. */
+  sendMessage: (conversationId: number | null, text: string, paste: string | null = null) =>
     invoke<{ conversation: Conversation; message: Message }>("send_message", {
       conversationId,
       text,
+      paste,
     }),
+  /** Applies a drafted change set in one transaction; returns the draft marked applied. */
+  applyDraft: (conversationId: number, messageId: number) =>
+    invoke<Message>("apply_draft", { conversationId, messageId }),
+  discardDraft: (conversationId: number, messageId: number) =>
+    invoke<Message>("discard_draft", { conversationId, messageId }),
   cancelReply: (conversationId: number) => invoke<void>("cancel_reply", { conversationId }),
   /** The value behind a handle the assistant wrote, e.g. `n12.0`. */
   revealHandle: (handle: string) => invoke<string>("reveal_handle", { handle }),

@@ -85,6 +85,8 @@ export function AssistantView({ assistant, tree, session, run, onCopy, composerR
               session={session}
               run={run}
               onCopy={onCopy}
+              onApply={assistant.applyDraft}
+              onDiscard={assistant.discardDraft}
             />
             <AssistantComposer
               ref={composerRef}

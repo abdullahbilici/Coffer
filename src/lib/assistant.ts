@@ -1,4 +1,4 @@
-import type { Message, ToolCall, Tree } from "./api";
+import type { DraftGroup, DraftStatus, Message, ToolCall, Tree } from "./api";
 
 /**
  * A secret handle the assistant writes: `[n12.0]` (note 12, secret 0), `[p3.0]` (project
@@ -32,6 +32,16 @@ const id = (value: unknown): number | null => {
 /** A calm one-line description of a tool call, e.g. "Searched for aws". */
 export function toolLabel(call: ToolCall, tree: Tree): string {
   const args = call.arguments ?? {};
+  const withName = (label: string, name: unknown) => {
+    const value = text(name);
+    return value ? `${label} ${value}` : label;
+  };
+  const noteTitle = (value: unknown) =>
+    tree.items.find((i) => i.id === id(value))?.title ?? "a note";
+  const todoTitle = (value: unknown) =>
+    tree.todos.find((t) => t.id === id(value))?.title ?? "a todo";
+  const paymentName = (value: unknown) =>
+    tree.payments.find((p) => p.id === id(value))?.name ?? "a payment";
   const project = text(args.project);
   const inProject = project ? ` for ${project}` : "";
   switch (call.name) {
@@ -57,6 +67,36 @@ export function toolLabel(call: ToolCall, tree: Tree): string {
       return `Checked payments${inProject}`;
     case "project_spend":
       return `Added up spend${inProject}`;
+    case "create_project":
+      return withName("Drafted project", args.name);
+    case "create_folder":
+      return withName("Drafted folder", args.name);
+    case "create_note":
+      return withName("Drafted note", args.title);
+    case "add_notes": {
+      const count = Array.isArray(args.notes) ? args.notes.length : 0;
+      return count === 1 ? "Drafted 1 note" : `Drafted ${count} notes`;
+    }
+    case "add_field":
+    case "update_field":
+    case "remove_field":
+      return `Drafted ${text(args.label) ?? "a field"} in ${noteTitle(args.note)}`;
+    case "rename":
+      return withName("Drafted rename to", args.name);
+    case "move_note":
+      return `Drafted moving ${noteTitle(args.note)}`;
+    case "delete_note":
+      return `Drafted deleting ${noteTitle(args.note)}`;
+    case "create_todo":
+      return withName("Drafted todo", args.title);
+    case "update_todo":
+    case "complete_todo":
+      return `Drafted ${todoTitle(args.id)}`;
+    case "create_payment":
+      return withName("Drafted payment", args.name);
+    case "update_payment":
+    case "cancel_payment":
+      return `Drafted ${paymentName(args.id)}`;
     default:
       return call.name;
   }
@@ -64,15 +104,22 @@ export function toolLabel(call: ToolCall, tree: Tree): string {
 
 /** What the thread shows, in order. Tool calls in a row form one group, whichever turns made them. */
 export type Block =
-  | { kind: "user"; key: string; text: string }
+  | { kind: "user"; key: string; text: string; paste: string | null }
   | { kind: "reply"; key: string; text: string }
   | { kind: "tools"; key: string; calls: ToolCall[] }
-  | { kind: "stopped"; key: string };
+  | { kind: "stopped"; key: string }
+  | { kind: "draft"; key: string; id: number; groups: DraftGroup[]; status: DraftStatus };
 
 export function threadBlocks(messages: Message[]): Block[] {
   const blocks: Block[] = [];
   for (const m of messages) {
-    if (m.role === "user") blocks.push({ kind: "user", key: `user:${m.id}`, text: m.text });
+    if (m.role === "user") {
+      blocks.push({ kind: "user", key: `user:${m.id}`, text: m.text, paste: m.paste ?? null });
+    }
+    if (m.role === "draft") {
+      const { groups, status } = m;
+      blocks.push({ kind: "draft", key: `draft:${m.id}`, id: m.id, groups, status });
+    }
     if (m.role !== "assistant") continue;
     if (m.text) blocks.push({ kind: "reply", key: `reply:${m.id}`, text: m.text });
     if (m.toolCalls.length > 0) {

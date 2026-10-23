@@ -4,8 +4,11 @@ import {
   Boxes,
   Calculator,
   ChevronRight,
+  ClipboardList,
+  FilePen,
   FileText,
   Folder,
+  FolderPlus,
   ListTodo,
   Search,
   Sparkles,
@@ -19,6 +22,7 @@ import type { Session } from "../../hooks/useSession";
 import type { ToolCall, Tree } from "../../lib/api";
 import { threadBlocks, toolLabel, withSecretChips, type Block } from "../../lib/assistant";
 import { cx } from "../../lib/cx";
+import { DraftCard } from "./DraftCard";
 import { Markdown } from "./Markdown";
 import styles from "./Assistant.module.css";
 
@@ -31,6 +35,22 @@ const TOOL_ICONS: Record<string, LucideIcon> = {
   list_todos: ListTodo,
   list_payments: Wallet,
   project_spend: Calculator,
+  create_project: Box,
+  create_folder: FolderPlus,
+  create_note: FilePen,
+  add_notes: FilePen,
+  add_field: FilePen,
+  update_field: FilePen,
+  remove_field: FilePen,
+  rename: FilePen,
+  move_note: Folder,
+  delete_note: FilePen,
+  create_todo: ListTodo,
+  update_todo: ListTodo,
+  complete_todo: ListTodo,
+  create_payment: Wallet,
+  update_payment: Wallet,
+  cancel_payment: Wallet,
 };
 
 /** Within this distance of the bottom, new content keeps the thread scrolled to the end. */
@@ -38,10 +58,15 @@ const STICK_PX = 48;
 
 type Shared = { tree: Tree; session: Session; run: Run; onCopy: Copy };
 
-type Props = Shared & { thread: Thread; replying: boolean };
+type Drafts = {
+  onApply: (messageId: number) => Promise<void>;
+  onDiscard: (messageId: number) => Promise<void>;
+};
+
+type Props = Shared & Drafts & { thread: Thread; replying: boolean };
 
 /** The messages of one conversation, with the reply streaming in at the end. */
-export function AssistantThread({ thread, replying, ...shared }: Props) {
+export function AssistantThread({ thread, replying, onApply, onDiscard, ...shared }: Props) {
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
 
@@ -88,6 +113,8 @@ export function AssistantThread({ thread, replying, ...shared }: Props) {
               block={block}
               results={results}
               replying={replying}
+              onApply={onApply}
+              onDiscard={onDiscard}
               {...shared}
             />
           ))}
@@ -106,16 +133,41 @@ export function AssistantThread({ thread, replying, ...shared }: Props) {
   );
 }
 
-type ThreadBlockProps = Shared & {
-  block: Block;
-  results: ReadonlyMap<string, string>;
-  replying: boolean;
-};
+type ThreadBlockProps = Shared &
+  Drafts & {
+    block: Block;
+    results: ReadonlyMap<string, string>;
+    replying: boolean;
+  };
 
-function ThreadBlock({ block, results, replying, ...shared }: ThreadBlockProps) {
+function ThreadBlock({
+  block,
+  results,
+  replying,
+  onApply,
+  onDiscard,
+  ...shared
+}: ThreadBlockProps) {
   switch (block.kind) {
     case "user":
-      return <div className={styles.user}>{block.text}</div>;
+      return (
+        <>
+          {block.paste !== null && <Paste text={block.paste} />}
+          {block.text && <div className={styles.user}>{block.text}</div>}
+        </>
+      );
+    case "draft":
+      return (
+        <DraftCard
+          groups={block.groups}
+          status={block.status}
+          session={shared.session}
+          run={shared.run}
+          onCopy={shared.onCopy}
+          onApply={() => onApply(block.id)}
+          onDiscard={() => onDiscard(block.id)}
+        />
+      );
     case "reply":
       return <Reply text={block.text} {...shared} />;
     case "tools":
@@ -135,6 +187,18 @@ function ThreadBlock({ block, results, replying, ...shared }: ThreadBlockProps) 
     case "stopped":
       return <p className={styles.stopped}>Stopped</p>;
   }
+}
+
+/** Pasted text sent for import, as a quiet attachment: its values stay out of the thread. */
+function Paste({ text }: { text: string }) {
+  const lines = text.split("\n").filter((l) => l.trim()).length;
+  return (
+    <div className={styles.paste}>
+      <ClipboardList size={14} strokeWidth={1.75} className={styles.pasteIcon} />
+      <span>Pasted text</span>
+      <span className={styles.pasteMeta}>{lines === 1 ? "1 line" : `${lines} lines`}</span>
+    </div>
+  );
 }
 
 /** Assistant markdown; secret handles render as masked chips the user can reveal. */
