@@ -6,6 +6,7 @@ import type { Appearance } from "../../hooks/useAppearance";
 import type { Session } from "../../hooks/useSession";
 import { useSettings } from "../../hooks/useSettings";
 import { IconButton } from "../ui/IconButton";
+import { AssistantSection } from "./AssistantSection";
 import { BackupSection } from "./BackupSection";
 import { GeneralSection } from "./GeneralSection";
 import styles from "./SettingsModal.module.css";
@@ -94,7 +95,14 @@ export function SettingsModal(props: Props) {
                 onRestored={props.onRestored}
               />
             )}
-            {section === "assistant" && <p className={styles.empty}>Coming soon</p>}
+            {section === "assistant" && settings && (
+              <AssistantSection
+                assistant={settings.assistant}
+                onChange={(assistant) => setSettings({ ...settings, assistant })}
+                session={session}
+                run={run}
+              />
+            )}
           </div>
         </section>
       </div>

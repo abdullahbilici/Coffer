@@ -215,6 +215,14 @@ pub fn delete(conn: &Connection, id: i64) -> AppResult<()> {
     expect_changed(conn.execute("DELETE FROM items WHERE id = ?1", [id])?)
 }
 
+/// The stored text of every note that isn't secure: plain bodies, or templates whose secrets are
+/// `` `!n!` `` markers. Nothing here is decrypted.
+pub fn templates(conn: &Connection) -> AppResult<Vec<(i64, String)>> {
+    let mut stmt = conn.prepare("SELECT id, body FROM items WHERE secure = 0 AND body != ''")?;
+    let rows = stmt.query_map([], |row| Ok((row.get("id")?, row.get("body")?)))?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
 /// Ids of readable notes whose text contains `query`, case-insensitively. Secure bodies and the
 /// secrets inside templates are never searched.
 pub fn search_bodies(conn: &Connection, query: &str) -> AppResult<Vec<i64>> {

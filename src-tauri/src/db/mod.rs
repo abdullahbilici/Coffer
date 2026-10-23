@@ -1,3 +1,4 @@
+pub mod conversations;
 pub mod folders;
 pub mod items;
 pub mod payments;
@@ -134,6 +135,29 @@ const MIGRATIONS: &[Migration] = &[
     CREATE INDEX todos_project ON todos (project_id);
     CREATE INDEX todos_item ON todos (item_id);
     CREATE INDEX payments_project ON payments (project_id);
+"#,
+    ),
+    // Assistant conversations. Titles and messages may hold anything the user typed, so both
+    // are sealed with the vault key; a message is a JSON turn (see `assistant::Turn`).
+    Migration::Sql(
+        r#"
+    CREATE TABLE conversations (
+        id               INTEGER PRIMARY KEY,
+        title_nonce      BLOB    NOT NULL,
+        title_ciphertext BLOB    NOT NULL,
+        created_at       INTEGER NOT NULL,
+        updated_at       INTEGER NOT NULL
+    );
+
+    CREATE TABLE conversation_messages (
+        id              INTEGER PRIMARY KEY,
+        conversation_id INTEGER NOT NULL REFERENCES conversations (id) ON DELETE CASCADE,
+        nonce           BLOB    NOT NULL,
+        ciphertext      BLOB    NOT NULL,
+        created_at      INTEGER NOT NULL
+    );
+
+    CREATE INDEX conversation_messages_conversation ON conversation_messages (conversation_id);
 "#,
     ),
 ];
@@ -303,5 +327,39 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn migration_7_adds_conversations() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "foreign_keys", true).unwrap();
+        migrate_to(&conn, 6).unwrap();
+        conn.execute_batch(
+            "INSERT INTO projects (id, name, created_at, updated_at) VALUES (1, 'Acme', 0, 0);
+             INSERT INTO settings (key, value) VALUES ('unlock_window_secs', '60');
+             INSERT INTO todos (project_id, title, created_at, updated_at)
+             VALUES (1, 'Rotate key', 0, 0);",
+        )
+        .unwrap();
+
+        migrate(&conn).unwrap();
+
+        assert_eq!(todos::list(&conn).unwrap().len(), 1);
+        assert_eq!(settings::load(&conn).unwrap().unlock_window_secs, Some(60));
+        let sealed = SecureBody {
+            nonce: vec![1],
+            ciphertext: vec![2],
+        };
+        let id = conversations::insert(&conn, &sealed, 5).unwrap();
+        conversations::insert_message(&conn, id, &sealed, 6).unwrap();
+        assert_eq!(conversations::messages(&conn, id).unwrap().len(), 1);
+        assert_eq!(conversations::list(&conn).unwrap()[0].updated_at, 6);
+        conversations::delete(&conn, id).unwrap();
+        let orphans: i64 = conn
+            .query_row("SELECT COUNT(*) FROM conversation_messages", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(orphans, 0);
     }
 }

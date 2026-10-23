@@ -16,7 +16,9 @@ import { PaymentsView } from "../components/views/PaymentsView";
 import { SearchView } from "../components/views/SearchView";
 import { TodoEditor } from "../components/views/TodoEditor";
 import { TodosView } from "../components/views/TodosView";
+import { AssistantView } from "../components/views/AssistantView";
 import { useAppearance } from "../hooks/useAppearance";
+import { useAssistant } from "../hooks/useAssistant";
 import { useExpansion } from "../hooks/useExpansion";
 import { useNavigation } from "../hooks/useNavigation";
 import { useSession } from "../hooks/useSession";
@@ -63,6 +65,9 @@ export function App() {
     [showToast],
   );
 
+  const assistant = useAssistant(session, run);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+
   const { actions, saveItem, deleting } = useVaultActions({
     tree,
     reload,
@@ -95,16 +100,23 @@ export function App() {
     showToast("Vault restored", "success");
   }, [reload, select, showToast]);
 
-  // Cmd+, opens Settings.
+  // Cmd+, opens Settings; Cmd+J opens the assistant with its field focused.
+  const { selectAssistant } = actions;
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!event.metaKey || (event.code !== "Comma" && event.key !== ",")) return;
-      event.preventDefault();
-      setSettingsOpen(true);
+      if (!event.metaKey) return;
+      if (event.code === "Comma" || event.key === ",") {
+        event.preventDefault();
+        setSettingsOpen(true);
+      } else if (event.code === "KeyJ" || event.key.toLowerCase() === "j") {
+        event.preventDefault();
+        selectAssistant();
+        requestAnimationFrame(() => composerRef.current?.focus());
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [selectAssistant]);
 
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
 
@@ -193,6 +205,17 @@ export function App() {
         );
       case "payments":
         return <PaymentsView tree={tree} actions={actions} />;
+      case "assistant":
+        return (
+          <AssistantView
+            assistant={assistant}
+            tree={tree}
+            session={session}
+            run={run}
+            onCopy={copy}
+            composerRef={composerRef}
+          />
+        );
       case "paymentEditor":
         return (
           <PaymentEditor

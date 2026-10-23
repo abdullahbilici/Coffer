@@ -76,14 +76,19 @@ pub fn restore(template: &str, secrets: &[String]) -> String {
 
 /// A template with its `` `!n!` `` markers removed: the text anyone can read without a key.
 pub fn strip_markers(template: &str) -> String {
+    replace_markers(template, |_| String::new())
+}
+
+/// A template with each `` `!n!` `` marker (ticks included) replaced by `with(n)`.
+pub fn replace_markers(template: &str, mut with: impl FnMut(usize) -> String) -> String {
     let mut text = String::with_capacity(template.len());
     let mut last = 0;
     let mut from = 0;
     while let Some((start, end)) = next_span(template, from) {
-        let is_marker =
-            as_secret(&template[start..end]).is_some_and(|index| index.parse::<usize>().is_ok());
-        if is_marker {
+        let index = as_secret(&template[start..end]).and_then(|index| index.parse().ok());
+        if let Some(index) = index {
             text.push_str(&template[last..start - 1]);
+            text.push_str(&with(index));
             last = end + 1;
         }
         from = end + 1;

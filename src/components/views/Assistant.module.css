@@ -1,0 +1,431 @@
+/* Shared by the assistant screen: conversation list, thread and composer. */
+
+.root {
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr);
+  height: 100%;
+}
+
+/* Conversations. The top row sits under the back/forward buttons and drags the window. */
+.side {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--color-border);
+}
+
+.sideBar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: flex-end;
+  height: var(--titlebar-height);
+  padding: 0 var(--space-3);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding-bottom: var(--space-3);
+  overflow-y: scroll;
+}
+
+.listEmpty {
+  margin: 0;
+  padding: var(--space-1) var(--space-4);
+  color: var(--color-text-tertiary);
+  font-size: var(--text-sm);
+}
+
+/* Like a sidebar tree row. */
+.row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--row-height);
+  margin: 0 var(--space-2) 1px;
+  padding: 0 var(--space-1) 0 var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.row:hover {
+  background: var(--color-bg-hover);
+}
+
+.rowSelected,
+.rowSelected:hover {
+  background: var(--color-bg-selected);
+  color: var(--color-text);
+}
+
+.rowLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--text-md);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowActions {
+  display: none;
+  flex-shrink: 0;
+}
+
+.row:hover .rowActions {
+  display: flex;
+}
+
+.row:hover .replyingDot {
+  display: none;
+}
+
+.replyingDot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  margin-right: var(--space-2);
+  border-radius: 50%;
+  background: var(--color-accent);
+  animation: pulse 1.4s var(--ease-out) infinite;
+}
+
+.rowEditing,
+.rowEditing:hover {
+  padding-left: var(--space-1);
+  background: transparent;
+}
+
+.rowInput {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-elevated);
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
+  font-size: var(--text-md);
+  user-select: text;
+}
+
+/* The open conversation. */
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.titlebar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  height: var(--titlebar-height);
+  padding: 0 var(--space-10);
+}
+
+.title {
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: var(--text-md);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: fade var(--duration-base) var(--ease-out);
+}
+
+/* Content fades out where it meets the composer instead of being cut (only the alpha counts). */
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: scroll;
+  mask-image: linear-gradient(to bottom, var(--color-bg) calc(100% - var(--space-6)), transparent);
+}
+
+.messages {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: 720px;
+  margin: 0 auto;
+  padding: var(--space-2) var(--space-10) var(--space-6);
+  animation: enter var(--duration-slow) var(--ease-out);
+}
+
+.emptyLabel {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  margin: 0;
+  color: var(--color-text-tertiary);
+  animation: fade var(--duration-slow) var(--ease-out);
+}
+
+.user {
+  align-self: flex-end;
+  max-width: 80%;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-selected);
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+  animation: rise var(--duration-base) var(--ease-out);
+}
+
+.reply {
+  word-break: break-word;
+}
+
+.tools {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tool {
+  animation: rise var(--duration-base) var(--ease-out);
+}
+
+.toolHead {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  height: 24px;
+  margin-left: -6px;
+  padding: 0 6px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  font-size: var(--text-sm);
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.toolHead:hover:enabled {
+  background: var(--color-bg-hover);
+  color: var(--color-text-secondary);
+}
+
+.toolIcon {
+  flex-shrink: 0;
+}
+
+.toolLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolPending .toolLabel,
+.toolPending .toolIcon {
+  animation: pulse 1.4s var(--ease-out) infinite;
+}
+
+.toolChevron {
+  flex-shrink: 0;
+  transition: transform var(--duration-base) var(--ease-out);
+}
+
+.toolChevronOpen {
+  transform: rotate(90deg);
+}
+
+.toolResult {
+  max-height: 240px;
+  margin: var(--space-1) 0 var(--space-2) 20px;
+  padding: var(--space-2) var(--space-3);
+  overflow-y: scroll;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-subtle);
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+  animation: open var(--duration-base) var(--ease-out);
+}
+
+.stopped {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--text-sm);
+}
+
+.error {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+  user-select: text;
+  animation: fade var(--duration-base) var(--ease-out);
+}
+
+/* Three quiet dots while the model reads or a tool runs. */
+.thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  animation: fade var(--duration-slow) var(--ease-out);
+}
+
+.thinking span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-text-tertiary);
+  animation: pulse 1.4s var(--ease-out) infinite;
+}
+
+.thinking span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.thinking span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+/* Composer, aligned with the messages above it. */
+.composerWrap {
+  flex-shrink: 0;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 0 var(--space-10) var(--space-5);
+}
+
+.composer {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  padding: 6px 6px 6px var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-elevated);
+  transition:
+    border-color var(--duration-fast),
+    box-shadow var(--duration-fast);
+}
+
+.composer:focus-within {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
+}
+
+.field {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 0;
+  overflow-y: scroll;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  line-height: 20px;
+  resize: none;
+  user-select: text;
+}
+
+.field::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.send {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-bg-selected);
+  color: var(--color-text-secondary);
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.send:disabled {
+  color: var(--color-text-tertiary);
+}
+
+.send:active:enabled {
+  transform: scale(0.94);
+}
+
+.sendReady {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+}
+
+.sendReady:hover {
+  background: var(--color-accent-hover);
+}
+
+.stopIcon {
+  fill: currentColor;
+}
+
+.locked {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  animation: fade var(--duration-slow) var(--ease-out);
+}
+
+.lockedLabel {
+  color: var(--color-text-tertiary);
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@keyframes open {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}

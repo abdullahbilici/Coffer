@@ -2,7 +2,15 @@ import { invoke } from "@tauri-apps/api/core";
 
 /** Mirrors `AppError` in `src-tauri/src/error.rs`. */
 export type ErrorKind =
-  "locked" | "notFound" | "invalid" | "auth" | "crypto" | "keychain" | "file" | "database";
+  | "locked"
+  | "notFound"
+  | "invalid"
+  | "auth"
+  | "crypto"
+  | "keychain"
+  | "file"
+  | "network"
+  | "database";
 
 export type AppError = { kind: ErrorKind; message: string };
 
@@ -22,6 +30,16 @@ export type BackupSettings = {
   lastError: string | null;
 };
 
+export type AssistantSettings = {
+  /** Base URL of an Ollama server. */
+  url: string;
+  model: string;
+  /** What the assistant should know; it reads this but never edits it. */
+  context: string;
+  /** An API key is stored in the Keychain. */
+  hasApiKey: boolean;
+};
+
 /** Mirrors `db::settings::Settings`. */
 export type Settings = {
   /** `null`: until the screen locks. */
@@ -29,7 +47,35 @@ export type Settings = {
   /** `null`: never. */
   clipboardClearSecs: number | null;
   backup: BackupSettings;
+  assistant: AssistantSettings;
 };
+
+export type Conversation = {
+  id: number;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+  /** A reply is being written right now. */
+  replying: boolean;
+};
+
+export type ToolCall = { id: string; name: string; arguments: Record<string, unknown> };
+
+/** Mirrors `assistant::Turn`. Assistant text may hold secret handles like `[n12.0]`. */
+export type Turn =
+  | { role: "user"; text: string }
+  | { role: "assistant"; text: string; toolCalls: ToolCall[]; stopped: boolean }
+  | { role: "tool"; callId: string; name: string; result: string };
+
+export type Message = Turn & { id: number; createdAt: number };
+
+/** Mirrors `commands::assistant::AssistantEvent`. */
+export type AssistantEvent =
+  /** The reply's text so far. */
+  | { type: "text"; conversationId: number; text: string }
+  | { type: "message"; conversationId: number; message: Message }
+  | { type: "done"; conversationId: number }
+  | { type: "failed"; conversationId: number; message: string };
 
 export type ProjectSummary = { id: number; name: string };
 
@@ -176,6 +222,27 @@ export const api = {
   setUnlockWindow: (secs: number | null) => invoke<SessionInfo>("set_unlock_window", { secs }),
   setClipboardClear: (secs: number | null) => invoke<void>("set_clipboard_clear", { secs }),
   clearClipboardLater: () => invoke<void>("clear_clipboard_later"),
+
+  /** `apiKey`: `null` keeps the stored key, `""` removes it. */
+  saveAssistantSettings: (url: string, model: string, context: string, apiKey: string | null) =>
+    invoke<Settings>("save_assistant_settings", { url, model, context, apiKey }),
+  /** Uses the stored API key only when `url` is the saved one and no key is typed. */
+  assistantModels: (url: string, apiKey: string | null) =>
+    invoke<string[]>("assistant_models", { url, apiKey }),
+  listConversations: () => invoke<Conversation[]>("list_conversations"),
+  getConversation: (id: number) => invoke<Message[]>("get_conversation", { id }),
+  renameConversation: (id: number, title: string) =>
+    invoke<void>("rename_conversation", { id, title }),
+  deleteConversation: (id: number) => invoke<void>("delete_conversation", { id }),
+  /** Starts a reply in the background; it arrives as `assistant-event`s. */
+  sendMessage: (conversationId: number | null, text: string) =>
+    invoke<{ conversation: Conversation; message: Message }>("send_message", {
+      conversationId,
+      text,
+    }),
+  cancelReply: (conversationId: number) => invoke<void>("cancel_reply", { conversationId }),
+  /** The value behind a handle the assistant wrote, e.g. `n12.0`. */
+  revealHandle: (handle: string) => invoke<string>("reveal_handle", { handle }),
 
   vaultIsEmpty: () => invoke<boolean>("vault_is_empty"),
   defaultBackupDir: () => invoke<string>("default_backup_dir"),

@@ -1,5 +1,6 @@
 //! Tauri command handlers. Keep them thin: validate input, take locks, delegate to `db`.
 
+pub mod assistant;
 pub mod backup;
 pub mod folders;
 pub mod items;
@@ -52,7 +53,7 @@ fn ensure_folder_in_project(
 }
 
 /// Rejects anything but a real calendar day written as `YYYY-MM-DD`.
-fn valid_date(value: &str) -> AppResult<&str> {
+pub(crate) fn valid_date(value: &str) -> AppResult<&str> {
     let invalid = || AppError::Invalid(format!("Invalid date: {value}"));
     let parts: Vec<&str> = value.split('-').collect();
     let [year, month, day] = parts[..] else {

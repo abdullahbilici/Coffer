@@ -31,7 +31,7 @@ pub fn db_file() -> String {
     })
 }
 
-/// Stands in for the Keychain in insecure runs (the backup key), so a rebuilt dev binary never
+/// Stands in for the Keychain in insecure runs (the backup key, the assistant's API key), so a rebuilt dev binary never
 /// waits on a Keychain access prompt. Lost when the app quits.
 static SECRETS: Mutex<BTreeMap<String, Zeroizing<Vec<u8>>>> = Mutex::new(BTreeMap::new());
 
@@ -48,4 +48,11 @@ pub fn store_secret(account: &str, bytes: &[u8]) {
         .lock()
         .expect("dev secrets lock poisoned")
         .insert(account.to_string(), Zeroizing::new(bytes.to_vec()));
+}
+
+pub fn delete_secret(account: &str) {
+    SECRETS
+        .lock()
+        .expect("dev secrets lock poisoned")
+        .remove(account);
 }

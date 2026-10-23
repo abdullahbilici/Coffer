@@ -193,6 +193,7 @@ export function useVaultActions({
       deleteTodo: (id) => run(() => deleteWithExit(agendaKey.todo(id), () => api.deleteTodo(id))),
 
       selectPayments: () => select({ kind: "payments" }),
+      selectAssistant: () => select({ kind: "assistant" }),
       editPayment: (id, projectId) =>
         guarded(() => select({ kind: "paymentEditor", id, projectId })),
       savePayment: (input: SavePaymentInput) => saveFromEditor(() => api.savePayment(input)),

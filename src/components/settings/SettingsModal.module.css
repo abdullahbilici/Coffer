@@ -96,8 +96,3 @@
   overflow-y: scroll;
   animation: fade var(--duration-base) var(--ease-out);
 }
-
-.empty {
-  margin: var(--space-4) 0 0;
-  color: var(--color-text-tertiary);
-}
